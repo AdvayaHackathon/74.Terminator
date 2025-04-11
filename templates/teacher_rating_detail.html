@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teacher Rating Details - EduPulse</title>
+
+  <!-- TailwindCSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Animate.css -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-900 text-white">
+
+  <!-- Navbar -->
+  <header class="fixed top-0 left-0 w-full z-50 bg-transparent backdrop-blur-sm shadow-md">
+    <div class="max-w-7xl mx-auto flex justify-between items-center px-6 py-4">
+      <h1 class="text-2xl font-extrabold tracking-wide text-white">EduPulse <span class="text-yellow-400">Admin</span></h1>
+      <nav class="hidden md:flex space-x-8 text-white text-lg font-medium">
+        <a href="{{ url_for('index') }}" class="hover:text-yellow-400">Home</a>
+        <a href="{{ url_for('principal_dashboard') }}" class="hover:text-yellow-400">Dashboard</a>
+        <a href="{{ url_for('teacher_ratings') }}" class="hover:text-yellow-400">Ratings</a>
+        <a href="/logout" class="hover:text-yellow-400">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Rating Detail Section -->
+  <section class="min-h-screen flex flex-col pt-28 pb-16 px-6 relative z-10">
+    <div class="max-w-7xl mx-auto">
+      <!-- Page Header -->
+      <div class="flex items-center mb-6">
+        <a href="{{ url_for('teacher_ratings') }}" class="bg-gray-800 hover:bg-gray-700 p-2 rounded-full mr-4">
+          <i class="fas fa-arrow-left text-yellow-400"></i>
+        </a>
+        <div>
+          <h2 class="text-3xl font-bold text-yellow-300">{{ teacher.name }} - Ratings</h2>
+          <p class="text-gray-400 mt-1">{{ teacher.subject.replace('_', ' ').title() if teacher.subject else 'No Subject' }} | {{ teacher.class.replace('class', 'Class ') if teacher.class else 'No Class' }}</p>
+        </div>
+      </div>
+
+      <!-- Error Message (if any) -->
+      {% if error_message %}
+      <div class="bg-red-500 bg-opacity-20 border border-red-500 p-4 rounded-lg mb-10 text-center animate__animated animate__fadeIn">
+        <div class="flex items-center justify-center">
+          <i class="fas fa-exclamation-triangle text-red-500 text-2xl mr-3"></i>
+          <p class="text-white">{{ error_message }}</p>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Teacher Rating Overview -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+        <!-- Overall Rating Card -->
+        <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md col-span-1">
+          <h3 class="text-xl font-semibold text-yellow-300 mb-4">Overall Rating</h3>
+          <div class="flex flex-col items-center">
+            {% set overall_rating = teacher.overall_rating|default(0)|float %}
+            <div class="text-6xl font-bold {{ 'text-green-400' if overall_rating >= 4 else 'text-yellow-400' if overall_rating >= 3 else 'text-red-400' }}">
+              {{ "%.1f"|format(overall_rating) }}
+            </div>
+            <div class="flex text-yellow-400 text-2xl my-3">
+              {% for i in range(5) %}
+                {% if i < overall_rating|int %}
+                  <i class="fas fa-star"></i>
+                {% elif i < overall_rating %}
+                  <i class="fas fa-star-half-alt"></i>
+                {% else %}
+                  <i class="far fa-star"></i>
+                {% endif %}
+              {% endfor %}
+            </div>
+            <p class="text-gray-400">Based on {{ teacher.ratings|default([])|length }} ratings</p>
+          </div>
+        </div>
+
+        <!-- Rating Trend -->
+        <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md col-span-3">
+          <h3 class="text-xl font-semibold text-yellow-300 mb-4">Rating Trends</h3>
+          <canvas id="ratingTrendChart" height="200"></canvas>
+        </div>
+      </div>
+
+      <!-- Weekly Rating Details -->
+      <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md mb-10">
+        <h3 class="text-xl font-semibold text-yellow-300 mb-6">Weekly Feedback Ratings</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {% for rating in ratings %}
+          <div class="bg-white bg-opacity-5 rounded-xl p-5 border border-gray-700">
+            <div class="flex justify-between items-start mb-4">
+              <div>
+                <h4 class="font-semibold text-white text-lg">Week Ending: {{ rating.week_ending }}</h4>
+                <p class="text-sm text-gray-400">{{ rating.calls_completed }} of {{ rating.total_students }} students responded</p>
+              </div>
+              <div class="flex items-center">
+                <div class="text-2xl font-bold {{ 'text-green-400' if rating.average_rating >= 4 else 'text-yellow-400' if rating.average_rating >= 3 else 'text-red-400' }}">
+                  {{ rating.average_rating }}
+                </div>
+                <div class="ml-2 {{ 'text-green-400' if rating.average_rating >= 4 else 'text-yellow-400' if rating.average_rating >= 3 else 'text-red-400' }}">
+                  <i class="fas fa-star"></i>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Rating Distribution -->
+            <div class="space-y-2 mt-4">
+              {% for star in range(5, 0, -1) %}
+              <div class="flex items-center">
+                <div class="w-10 text-right mr-2 text-gray-400">{{ star }} <i class="fas fa-star text-xs text-yellow-400"></i></div>
+                <div class="w-full bg-gray-700 rounded-full h-2">
+                  {% set count = rating.ratings[star|string]|default(0) %}
+                  {% set percent = (count / rating.calls_completed * 100) if rating.calls_completed > 0 else 0 %}
+                  <div class="bg-gradient-to-r 
+                    {{ 'from-green-500 to-green-300' if star >= 4 else 
+                       'from-yellow-500 to-yellow-300' if star >= 3 else 
+                       'from-red-500 to-red-300' }} 
+                    h-2 rounded-full" style="width: {{ percent }}%"></div>
+                </div>
+                <div class="w-10 text-left ml-2 text-gray-400">{{ count }}</div>
+              </div>
+              {% endfor %}
+            </div>
+            
+            <!-- Completed At -->
+            <div class="mt-4 text-right text-sm text-gray-400">
+              Feedback collected on {{ rating.completed_at.strftime('%d %b %Y, %H:%M') if rating.completed_at else 'Unknown' }}
+            </div>
+          </div>
+          {% endfor %}
+          
+          {% if not ratings %}
+          <div class="col-span-2 text-center py-10 text-gray-400">
+            <i class="fas fa-info-circle text-4xl mb-3"></i>
+            <p class="text-xl">No rating history available for this teacher</p>
+            <p class="mt-2">Run the weekly feedback process to generate ratings.</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      
+      <!-- IVR Call Details -->
+      <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md">
+        <h3 class="text-xl font-semibold text-yellow-300 mb-4">About IVR Feedback System</h3>
+        <div class="text-gray-300">
+          <p>The EduPulse IVR (Interactive Voice Response) feedback system makes automated calls to students every Saturday to collect feedback on the week's teaching sessions.</p>
+          <p class="mt-3">Students rate their experience on a scale of 1-5 by pressing the corresponding number on their phone keypad.</p>
+          <p class="mt-3">This provides teachers and principals with valuable insights on teaching effectiveness while ensuring student anonymity.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Rating trend chart
+      const ctx = document.getElementById('ratingTrendChart').getContext('2d');
+      
+      // Prepare data from ratings
+      const ratings = {{ ratings|tojson }};
+      const labels = [];
+      const data = [];
+      
+      // Sort ratings by date
+      ratings.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      
+      // Extract data for chart
+      ratings.forEach(rating => {
+        labels.push(rating.week_ending);
+        data.push(rating.average_rating);
+      });
+      
+      const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Rating',
+            data: data,
+            backgroundColor: 'rgba(59, 130, 246, 0.2)',
+            borderColor: 'rgba(59, 130, 246, 1)',
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+            pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+            pointRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: false,
+              min: 0,
+              max: 5,
+              ticks: {
+                stepSize: 1,
+                color: 'rgba(255, 255, 255, 0.7)'
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.1)'
+              }
+            },
+            x: {
+              ticks: {
+                color: 'rgba(255, 255, 255, 0.7)'
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.1)'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            }
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html> 

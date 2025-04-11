@@ -151,6 +151,13 @@
           </div>
         </div>
         <a href="{{ url_for('teacher_dashboard') }}" class="hover:text-yellow-400">Dashboard</a>
+        <!-- Notifications button -->
+        <div class="relative group">
+          <button onclick="showWarningsModal()" class="hover:text-yellow-400 inline-flex items-center">
+            <i class="fas fa-bell"></i>
+            <span id="notification-badge" class="hidden absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">0</span>
+          </button>
+        </div>
       </nav>
     </div>
   </header>
@@ -573,6 +580,150 @@
         progressBar.style.width = width + '%';
       }
     });
+  </script>
+
+  <!-- Warnings Modal -->
+  <div id="warningsModal" class="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center hidden">
+    <div class="bg-gray-900 rounded-2xl border border-gray-700 p-6 max-w-2xl w-[90%] animate__animated animate__fadeInUp max-h-[80vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-2xl font-bold text-yellow-300">Notifications</h3>
+        <button onclick="hideWarningsModal()" class="text-gray-400 hover:text-white">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <div id="warningsContainer" class="space-y-4">
+        <!-- Warnings will be loaded here -->
+        <div class="text-center text-gray-400 py-8">
+          <i class="fas fa-spinner fa-spin text-2xl mb-3"></i>
+          <p>Loading notifications...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Check for warnings on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      checkForWarnings();
+    });
+    
+    // Function to check for warnings and update badge
+    function checkForWarnings() {
+      fetch('/api/unread_warnings_count')
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === "success") {
+            const badge = document.getElementById('notification-badge');
+            if (data.count > 0) {
+              badge.textContent = data.count > 9 ? '9+' : data.count;
+              badge.classList.remove('hidden');
+            } else {
+              badge.classList.add('hidden');
+            }
+          }
+        })
+        .catch(error => {
+          console.error("Error checking warnings:", error);
+        });
+    }
+    
+    // Function to show warnings modal
+    function showWarningsModal() {
+      document.getElementById('warningsModal').classList.remove('hidden');
+      loadWarnings();
+    }
+    
+    // Function to hide warnings modal
+    function hideWarningsModal() {
+      document.getElementById('warningsModal').classList.add('hidden');
+    }
+    
+    // Function to load warnings
+    function loadWarnings() {
+      fetch('/api/teacher_warnings')
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === "success") {
+            const warningsContainer = document.getElementById('warningsContainer');
+            
+            if (data.warnings.length === 0) {
+              warningsContainer.innerHTML = `
+                <div class="text-center text-gray-400 py-8">
+                  <i class="fas fa-check-circle text-2xl mb-3"></i>
+                  <p>No notifications at this time.</p>
+                </div>
+              `;
+              return;
+            }
+            
+            let warningsHTML = '';
+            
+            data.warnings.forEach(warning => {
+              // Determine message background
+              let bgClass = '';
+              let iconClass = '';
+              
+              const lowAttendance = warning.attendance_percentage < 75;
+              const lowProgress = warning.progress_percentage < 60;
+              
+              if (lowAttendance && lowProgress) {
+                bgClass = 'bg-red-500 bg-opacity-20 border-red-500';
+                iconClass = 'text-red-500';
+              } else if (lowAttendance || lowProgress) {
+                bgClass = 'bg-yellow-500 bg-opacity-20 border-yellow-500';
+                iconClass = 'text-yellow-500';
+              } else {
+                bgClass = 'bg-blue-500 bg-opacity-20 border-blue-500';
+                iconClass = 'text-blue-500';
+              }
+              
+              // Format date
+              const sentDate = new Date(warning.sent_at);
+              const formattedDate = `${sentDate.toLocaleDateString()} at ${sentDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
+              
+              warningsHTML += `
+                <div class="${bgClass} border p-4 rounded-lg">
+                  <div class="flex items-start">
+                    <i class="fas fa-exclamation-circle ${iconClass} text-xl mt-1 mr-3"></i>
+                    <div class="flex-1">
+                      <div class="flex justify-between items-start">
+                        <p class="font-medium text-white">Message from Principal</p>
+                        <span class="text-xs text-gray-400">${formattedDate}</span>
+                      </div>
+                      <p class="text-gray-300 mt-2">${warning.message}</p>
+                      <div class="mt-3 grid grid-cols-2 gap-2">
+                        <div>
+                          <p class="text-xs text-gray-400">Your Attendance</p>
+                          <p class="text-white font-medium">${warning.attendance_percentage}%</p>
+                        </div>
+                        <div>
+                          <p class="text-xs text-gray-400">Your Progress</p>
+                          <p class="text-white font-medium">${warning.progress_percentage}%</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              `;
+            });
+            
+            warningsContainer.innerHTML = warningsHTML;
+            
+            // Update the badge since we've read them
+            document.getElementById('notification-badge').classList.add('hidden');
+          }
+        })
+        .catch(error => {
+          console.error("Error loading warnings:", error);
+          document.getElementById('warningsContainer').innerHTML = `
+            <div class="text-center text-red-400 py-8">
+              <i class="fas fa-exclamation-circle text-2xl mb-3"></i>
+              <p>Failed to load notifications. Please try again later.</p>
+            </div>
+          `;
+        });
+    }
   </script>
 
 </body>

@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 import logging
 import calendar
+import random
+import string
+import uuid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -49,6 +52,7 @@ teacher_monthly_stats = db["teacher_monthly_stats"]
 subject_activity_stats = db["subject_activity_stats"]
 curriculum_collection = db["curriculum"]
 course_progress_collection = db["course_progress"]
+feedback_ratings_collection = db["feedback_ratings"]
 
 # Activity types with associated icons and colors
 ACTIVITY_TYPES = {
@@ -69,17 +73,421 @@ def verify_db_connection():
         logger.error(f"Database connection error: {e}")
         return False
 
+# Simulated Twilio IVR Call Client
+class SimulatedTwilioClient:
+    """
+    A simulated Twilio client for demo purposes.
+    In a real application, you would use the actual Twilio client with your Twilio credentials.
+    """
+    def __init__(self):
+        # These would be real Twilio credentials in production
+        self.account_sid = "TWILIO_ACCOUNT_SID_PLACEHOLDER"
+        self.auth_token = "TWILIO_AUTH_TOKEN_PLACEHOLDER"
+        self.from_number = "+15555555555"  # Your Twilio phone number
+        logger.info("Initialized simulated Twilio client")
+        
+    def make_ivr_call(self, to_number, teacher_name, class_name, subject, callback_url):
+        """
+        Simulate making an IVR call to a student
+        In a real application, this would make an actual Twilio call
+        """
+        try:
+            logger.info(f"SIMULATED: Making IVR call to {to_number} for feedback on {teacher_name}'s {subject} class")
+            
+            # This would be the actual Twilio API call in production
+            # client.calls.create(
+            #     to=to_number,
+            #     from_=self.from_number,
+            #     url=callback_url,
+            #     method="POST",
+            #     status_callback=status_callback_url,
+            #     status_callback_method="POST"
+            # )
+            
+            # For simulation, we'll just return success
+            return {
+                "status": "queued",
+                "sid": f"CA{generate_random_id(32)}",
+                "to": to_number,
+                "from": self.from_number,
+                "direction": "outbound-api",
+                "date_created": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Error in simulated IVR call: {e}")
+            return None
+            
+    def get_call_status(self, call_sid):
+        """
+        Simulate getting call status
+        In a real application, this would check the actual call status
+        """
+        # Simulated statuses: queued, ringing, in-progress, completed, busy, failed, no-answer
+        statuses = ["queued", "ringing", "in-progress", "completed", "busy", "failed", "no-answer"]
+        # Weight toward completed for demo purposes
+        weights = [1, 1, 1, 5, 0.5, 0.5, 1]
+        return random.choices(statuses, weights=weights)[0]
+        
+    def get_ivr_response(self, call_sid):
+        """
+        Simulate getting IVR input response
+        In a real application, this would get the actual digits pressed
+        """
+        # Simulate a student pressing 1-5 on their phone
+        response = random.choices([1, 2, 3, 4, 5], weights=[1, 2, 3, 4, 5])[0]
+        logger.info(f"SIMULATED: Student pressed {response} for call {call_sid}")
+        return str(response)
+
+# Helper function to generate random ID (for simulating Twilio call SIDs)
+def generate_random_id(length):
+    """Generate a random ID of specified length"""
+    return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(length))
+
+# IVR Feedback System Functions
+def schedule_weekly_feedback_calls():
+    """
+    Schedule weekly feedback calls to students for all teachers.
+    In a production environment, this would be scheduled to run automatically
+    once per week using a task scheduler.
+    """
+    try:
+        logger.info("Starting weekly feedback call scheduling process...")
+        
+        # First verify database connection
+        if not verify_db_connection():
+            logger.error("Database connection failed - cannot schedule feedback calls")
+            return False
+        
+        # Initialize our simulated Twilio client
+        twilio = SimulatedTwilioClient()
+        
+        # Find all teachers
+        teachers = list(users_collection.find({"role": "teacher"}))
+        logger.info(f"Found {len(teachers)} teachers for feedback scheduling")
+        
+        if not teachers:
+            logger.warning("No teachers found in the database. Skipping feedback scheduling.")
+            return False
+            
+        # Track processed teachers
+        processed_count = 0
+        success_count = 0
+        
+        # Process each teacher
+        for teacher in teachers:
+            teacher_email = teacher.get("email")
+            class_level = teacher.get("class")
+            subject = teacher.get("subject")
+            
+            if not teacher_email:
+                logger.warning(f"Teacher record missing email: {teacher.get('_id')}")
+                continue
+                
+            if not class_level or not subject:
+                logger.warning(f"Teacher {teacher_email} missing class or subject information. Skipping.")
+                continue
+                
+            try:
+                logger.info(f"Scheduling feedback for teacher: {teacher_email}, Class: {class_level}, Subject: {subject}")
+                
+                # Create a new feedback request in the database
+                feedback_request = {
+                    "_id": str(uuid.uuid4()),
+                    "teacher_email": teacher_email,
+                    "teacher_name": f"{teacher.get('first_name', '')} {teacher.get('last_name', '')}",
+                    "class": class_level,
+                    "subject": subject,
+                    "status": "scheduled",
+                    "created_at": datetime.now(),
+                    "ratings": {
+                        "1": 0,
+                        "2": 0,
+                        "3": 0,
+                        "4": 0,
+                        "5": 0
+                    },
+                    "average_rating": 0
+                }
+                
+                # Insert the feedback request
+                result = feedback_ratings_collection.insert_one(feedback_request)
+                
+                if not result.inserted_id:
+                    logger.error(f"Failed to create feedback request for {teacher_email}")
+                    continue
+                
+                # Queue initial phone calls
+                feedback_id = result.inserted_id
+                logger.info(f"Created feedback request with ID: {feedback_id}")
+                
+                # In a real application, we would queue calls with Twilio here
+                # For testing purposes, simulate the feedback
+                sim_result = simulate_student_feedback(feedback_id)
+                
+                if sim_result:
+                    success_count += 1
+                    logger.info(f"Successfully scheduled and simulated feedback for {teacher_email}")
+                else:
+                    logger.error(f"Failed to simulate feedback for {teacher_email}")
+                
+                processed_count += 1
+            except Exception as e:
+                logger.error(f"Error processing teacher {teacher_email}: {e}")
+                
+        logger.info(f"Weekly feedback scheduling completed. Processed {processed_count} teachers, {success_count} successful")
+        return success_count > 0
+        
+    except Exception as e:
+        logger.error(f"Error scheduling weekly feedback: {e}")
+        return False
+
+def simulate_student_feedback(feedback_id):
+    """
+    Simulate student feedback for demo purposes.
+    In a real app, this would be replaced with actual IVR call logic using a service like Twilio.
+    """
+    try:
+        # Get the feedback request
+        feedback = feedback_ratings_collection.find_one({"_id": feedback_id})
+        if not feedback:
+            logger.error(f"Feedback request {feedback_id} not found")
+            return False
+        
+        # Initialize the simulated Twilio client    
+        twilio = SimulatedTwilioClient()
+        logger.info(f"Starting IVR call simulation for {feedback.get('teacher_name', 'Unknown Teacher')}")
+            
+        # In a real application, we would get a list of student phone numbers from a database
+        # For simulation, we'll generate random phone numbers
+        import random
+        student_count = random.randint(20, 30)
+        logger.info(f"Simulating {student_count} student calls for {feedback.get('teacher_email', 'unknown')}")
+        
+        # For each student, simulate a rating (1-5)
+        ratings = {
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0,
+            "5": 0
+        }
+        
+        call_records = []
+        completed_calls = 0
+        
+        # Simulate the IVR call process
+        for i in range(student_count):
+            # Generate a random phone number (for simulation only)
+            student_phone = f"+1555{random.randint(1000000, 9999999)}"
+            
+            # In a real application, this would be your server's callback URL for the IVR script
+            callback_url = "https://example.com/ivr/feedback"
+            
+            # Make the simulated call
+            try:
+                teacher_name = feedback.get('teacher_name', 'Unknown Teacher')
+                class_name = feedback.get('class', 'Unknown Class')
+                subject = feedback.get('subject', 'Unknown Subject')
+                
+                call = twilio.make_ivr_call(
+                    student_phone, 
+                    teacher_name, 
+                    class_name, 
+                    subject,
+                    callback_url
+                )
+                
+                if not call:
+                    logger.warning(f"Failed to make call to student {i+1}")
+                    continue
+                
+                # Record the call for tracking
+                call_records.append(call)
+                
+                # In a real application, we would wait for the call to complete
+                # For simulation, we'll check the call status immediately
+                call_status = twilio.get_call_status(call['sid'])
+                logger.debug(f"Call to {student_phone} status: {call_status}")
+                
+                # If the call was "completed", get the simulated rating
+                if call_status == "completed":
+                    rating = twilio.get_ivr_response(call['sid'])
+                    if rating in ratings:
+                        ratings[rating] += 1
+                        completed_calls += 1
+                        logger.debug(f"Student {i+1}: Rating = {rating}")
+                    else:
+                        logger.warning(f"Invalid rating received: {rating}")
+            except Exception as call_error:
+                logger.error(f"Error making call to student {i+1}: {call_error}")
+        
+        logger.info(f"Completed {completed_calls} out of {student_count} attempted calls")
+        
+        # Calculate average rating
+        total_ratings = sum(int(k) * v for k, v in ratings.items())
+        average_rating = round(total_ratings / completed_calls, 1) if completed_calls > 0 else 0
+        
+        logger.info(f"Calculated average rating for {feedback.get('teacher_email', 'unknown')}: {average_rating}")
+        
+        # Update the feedback document
+        update_result = feedback_ratings_collection.update_one(
+            {"_id": feedback_id},
+            {
+                "$set": {
+                    "status": "completed",
+                    "calls_completed": completed_calls,
+                    "total_students": student_count,
+                    "ratings": ratings,
+                    "average_rating": average_rating,
+                    "completed_at": datetime.now(),
+                    "call_records": [
+                        {
+                            "sid": call["sid"],
+                            "to": call["to"],
+                            "status": twilio.get_call_status(call["sid"]),
+                            "date": call["date_created"]
+                        } for call in call_records[:5]  # Store only first 5 call records to save space
+                    ]
+                }
+            }
+        )
+        
+        if not update_result.modified_count:
+            logger.warning(f"Failed to update feedback document {feedback_id}")
+            return False
+            
+        logger.info(f"Simulated feedback for {feedback_id} - Average rating: {average_rating}")
+        
+        # Update teacher's overall rating in their record
+        teacher_update_result = update_teacher_rating(feedback["teacher_email"], average_rating)
+        
+        return teacher_update_result
+    except Exception as e:
+        logger.error(f"Error simulating feedback: {e}")
+        return False
+
+def update_teacher_rating(teacher_email, new_rating):
+    """
+    Update the teacher's overall rating in their user record
+    """
+    try:
+        if not teacher_email:
+            logger.error("Teacher email is required to update rating")
+            return False
+            
+        logger.info(f"Updating rating for teacher: {teacher_email} with new rating: {new_rating}")
+        
+        teacher = users_collection.find_one({"email": teacher_email})
+        if not teacher:
+            logger.error(f"Teacher not found with email: {teacher_email}")
+            return False
+            
+        # Get current ratings or initialize
+        current_ratings = teacher.get("ratings", [])
+        if not isinstance(current_ratings, list):
+            logger.warning(f"Ratings for {teacher_email} was not a list, resetting to empty list")
+            current_ratings = []
+            
+        # Add the new rating
+        current_ratings.append(new_rating)
+        
+        # Calculate new average (with bounds check)
+        if current_ratings:
+            overall_rating = round(sum(current_ratings) / len(current_ratings), 1)
+        else:
+            overall_rating = 0.0
+            
+        logger.info(f"New overall rating for {teacher_email}: {overall_rating} (based on {len(current_ratings)} ratings)")
+        
+        # Update teacher record
+        update_result = users_collection.update_one(
+            {"email": teacher_email},
+            {
+                "$set": {
+                    "ratings": current_ratings,
+                    "overall_rating": overall_rating,
+                    "last_rating": new_rating,
+                    "last_rating_date": datetime.now()
+                }
+            }
+        )
+        
+        if not update_result.modified_count:
+            logger.warning(f"Failed to update rating for {teacher_email}")
+            return False
+            
+        logger.info(f"Successfully updated rating for {teacher_email}: {overall_rating}")
+        return True
+    except Exception as e:
+        logger.error(f"Error updating teacher rating for {teacher_email}: {e}")
+        return False
+
+def get_teacher_ratings(teacher_email=None):
+    """
+    Get ratings for all teachers or a specific teacher
+    """
+    try:
+        if teacher_email:
+            # Get ratings for a specific teacher
+            pipeline = [
+                {"$match": {"teacher_email": teacher_email}},
+                {"$sort": {"created_at": -1}},
+                {"$limit": 10}  # Get the 10 most recent ratings
+            ]
+        else:
+            # Get ratings for all teachers
+            pipeline = [
+                {"$sort": {"created_at": -1}},
+                {"$group": {
+                    "_id": "$teacher_email",
+                    "latest_rating": {"$first": "$average_rating"},
+                    "teacher_name": {"$first": "$teacher_name"},
+                    "subject": {"$first": "$subject"},
+                    "class": {"$first": "$class"},
+                    "last_rated": {"$first": "$completed_at"}
+                }}
+            ]
+            
+        ratings = list(feedback_ratings_collection.aggregate(pipeline))
+        return ratings
+    except Exception as e:
+        logger.error(f"Error getting teacher ratings: {e}")
+        return []
+
 # Make sure we have at least one test user and principal
 def create_test_users():
     try:
+        # Use a standardized school name to ensure consistency
+        standard_school_name = "Test School"
+        
+        # Check if test principal exists
+        if not principals_collection.find_one({"email": "principal@example.com"}):
+            # Create a test principal
+            test_principal = {
+                "name": "Test Principal",
+                "email": "principal@example.com",
+                "password": generate_password_hash("admin123"),
+                "school": standard_school_name,
+                "role": "principal",
+                "created_at": datetime.now()
+            }
+            principals_collection.insert_one(test_principal)
+            logger.info("Created test principal: principal@example.com with password: admin123")
+        else:
+            # Make sure the principal has the standardized school name
+            principals_collection.update_one(
+                {"email": "principal@example.com"},
+                {"$set": {"school": standard_school_name}}
+            )
+            
         # Check if test user exists
         if not users_collection.find_one({"email": "teacher@example.com"}):
-            # Create a test user
+            # Create a test user with the same school as the principal
             test_user = {
                 "name": "Test Teacher",
                 "email": "teacher@example.com",
                 "password": generate_password_hash("password123"),
-                "school": "Test School",
+                "school": standard_school_name,
                 "teacher_id": "TEST001",
                 "subject": "science",
                 "class": "class9",
@@ -88,20 +496,28 @@ def create_test_users():
             }
             users_collection.insert_one(test_user)
             logger.info("Created test user: teacher@example.com with password: password123")
+        else:
+            # Update the test user to ensure the school matches
+            users_collection.update_one(
+                {"email": "teacher@example.com"},
+                {"$set": {"school": standard_school_name}}
+            )
             
-        # Check if test principal exists
-        if not principals_collection.find_one({"email": "principal@example.com"}):
-            # Create a test principal
-            test_principal = {
-                "name": "Test Principal",
-                "email": "principal@example.com",
-                "password": generate_password_hash("admin123"),
-                "school": "Test School",
-                "role": "principal",
+        # Create an additional test teacher if needed
+        if not users_collection.find_one({"email": "teacher2@example.com"}):
+            test_user2 = {
+                "name": "Another Teacher",
+                "email": "teacher2@example.com",
+                "password": generate_password_hash("password123"),
+                "school": standard_school_name,
+                "teacher_id": "TEST002",
+                "subject": "english",
+                "class": "class10",
+                "role": "teacher",
                 "created_at": datetime.now()
             }
-            principals_collection.insert_one(test_principal)
-            logger.info("Created test principal: principal@example.com with password: admin123")
+            users_collection.insert_one(test_user2)
+            logger.info("Created additional test user: teacher2@example.com with password: password123")
     except Exception as e:
         logger.error(f"Error creating test users: {e}")
 
@@ -144,7 +560,7 @@ def signup():
 
     if users_collection.find_one({"email": email}):
         return jsonify({"status": "fail", "message": "Email already registered."})
-    
+
     if users_collection.find_one({"teacher_id": teacher_id}):
         return jsonify({"status": "fail", "message": "Teacher ID already registered."})
 
@@ -178,6 +594,7 @@ def login():
         session["subject"] = user.get("subject", "")
         session["class"] = user.get("class", "")
         session["role"] = "teacher"
+        logger.info(f"Teacher login successful: {email}, School: {session['school']}")
         return jsonify({"status": "success", "message": "Login successful!", "redirect": "/teacher_dashboard"})
     
     # If not a teacher, check if it's a principal
@@ -186,10 +603,27 @@ def login():
     if principal and check_password_hash(principal["password"], password):
         session["email"] = principal["email"]
         session["name"] = principal["name"]
-        session["school"] = principal.get("school", "")
+        
+        # Make sure the school is set
+        school = principal.get("school", "")
+        if not school:
+            # If no school is set, use "Test School" as default
+            logger.warning(f"Principal {email} has no school assigned, using default: Test School")
+            school = "Test School"
+            
+            # Update the principal record with the default school
+            principals_collection.update_one(
+                {"email": email},
+                {"$set": {"school": school}}
+            )
+            
+        session["school"] = school
         session["role"] = "principal"
+        
+        logger.info(f"Principal login successful: {email}, School: {session['school']}")
         return jsonify({"status": "success", "message": "Login successful!", "redirect": "/principal_dashboard"})
     
+    logger.warning(f"Failed login attempt for: {email}")
     return jsonify({"status": "fail", "message": "Invalid email or password."})
 
 @app.route("/teacher_dashboard")
@@ -1734,9 +2168,30 @@ def get_teacher_performance():
 @app.route("/principal_dashboard")
 def principal_dashboard():
     if "email" not in session or session.get("role") != "principal":
+        logger.warning(f"Unauthorized access to principal dashboard: {session.get('email', 'No email')}, role: {session.get('role', 'No role')}")
         return redirect(url_for("login"))
     
     try:
+        logger.info(f"Loading principal dashboard for: {session.get('email')}, school: {session.get('school', 'No school')}")
+        
+        # Ensure the principal has a school set
+        if not session.get("school"):
+            # Try to get the school from the database
+            principal = principals_collection.find_one({"email": session.get("email")})
+            if principal and principal.get("school"):
+                session["school"] = principal.get("school")
+                logger.info(f"Updated session with school: {principal.get('school')}")
+            else:
+                # Set a default school
+                session["school"] = "Test School"
+                logger.warning(f"No school found for principal {session.get('email')}, using default: Test School")
+                
+                # Update the principal in the database
+                principals_collection.update_one(
+                    {"email": session.get("email")},
+                    {"$set": {"school": "Test School"}}
+                )
+        
         # Get teacher statistics
         teacher_stats = get_teacher_stats()
         
@@ -1812,7 +2267,9 @@ def add_teacher():
             "class": class_level,
             "role": "teacher",
             "created_at": datetime.now(),
-            "created_by": session.get("email")
+            "created_by": session.get("email"),
+            "ratings": [],
+            "overall_rating": 0.0
         }
         
         # Insert into database
@@ -1836,12 +2293,304 @@ def add_teacher():
         logger.error(f"Error adding teacher: {str(e)}")
         return jsonify({"status": "fail", "message": f"An error occurred: {str(e)}"})
 
+# IVR Feedback System Routes
+@app.route("/api/trigger_weekly_feedback", methods=["POST"])
+def trigger_weekly_feedback():
+    """API route to trigger weekly feedback calls manually or via cron job"""
+    try:
+        # Check for API key in headers, form data, or JSON body
+        api_key = request.headers.get("X-API-Key")
+        
+        if not api_key and request.is_json:
+            api_key = request.json.get("api_key")
+            
+        if not api_key and request.form:
+            api_key = request.form.get("api_key")
+            
+        # Very basic auth for demo - in production use proper authentication
+        #if api_key != "YOUR_SECRET_API_KEY":
+        #    logger.warning(f"Unauthorized API access attempt with key: {api_key}")
+        #    return jsonify({"status": "fail", "message": "Unauthorized access"})
+            
+        # Log the request
+        logger.info("Received request to trigger weekly feedback calls")
+        
+        # Schedule the feedback calls
+        logger.info("Starting weekly feedback call process...")
+        result = schedule_weekly_feedback_calls()
+        
+        if result:
+            logger.info("Weekly feedback calls completed successfully")
+            return jsonify({
+                "status": "success", 
+                "message": "Weekly feedback calls scheduled successfully"
+            })
+        else:
+            logger.error("Failed to complete weekly feedback calls")
+            return jsonify({
+                "status": "fail", 
+                "message": "Failed to schedule feedback calls"
+            })
+            
+    except Exception as e:
+        logger.error(f"Error triggering feedback calls: {e}")
+        return jsonify({
+            "status": "fail", 
+            "message": f"An error occurred: {str(e)}"
+        })
+
+@app.route("/teacher_ratings")
+def teacher_ratings():
+    """View teacher ratings dashboard"""
+    if "email" not in session or session.get("role") != "principal":
+        return redirect(url_for("login"))
+    
+    try:
+        # Get all teacher ratings
+        ratings = get_teacher_ratings()
+        
+        return render_template(
+            "teacher_ratings.html",
+            ratings=ratings
+        )
+    except Exception as e:
+        logger.error(f"Error loading teacher ratings: {e}")
+        return render_template(
+            "teacher_ratings.html",
+            ratings=[],
+            error_message="Failed to load teacher ratings"
+        )
+
+@app.route("/teacher_rating/<email>")
+def teacher_rating_detail(email):
+    """View detailed ratings for a specific teacher"""
+    if "email" not in session:
+        return redirect(url_for("login"))
+    
+    # Principals can view any teacher, teachers can only view their own
+    if session.get("role") != "principal" and session.get("email") != email:
+        flash("You don't have permission to view this teacher's ratings", "error")
+        return redirect(url_for("teacher_dashboard"))
+    
+    try:
+        # Get teacher details
+        teacher = users_collection.find_one({"email": email})
+        if not teacher:
+            flash("Teacher not found", "error")
+            return redirect(url_for("principal_dashboard"))
+            
+        # Get detailed rating history
+        ratings = get_teacher_ratings(email)
+        
+        return render_template(
+            "teacher_rating_detail.html",
+            teacher=teacher,
+            ratings=ratings
+        )
+    except Exception as e:
+        logger.error(f"Error loading teacher rating details: {e}")
+        return render_template(
+            "teacher_rating_detail.html",
+            teacher={},
+            ratings=[],
+            error_message="Failed to load teacher rating details"
+        )
+
+@app.route("/api/send_warnings", methods=["POST"])
+def send_teacher_warnings():
+    """API route to send warning messages to teachers with low attendance or progress"""
+    if "email" not in session or session.get("role") != "principal":
+        return jsonify({"status": "fail", "message": "Unauthorized access"})
+    
+    try:
+        # Get threshold values from request
+        data = request.json
+        attendance_threshold = data.get("attendance_threshold", 75)
+        progress_threshold = data.get("progress_threshold", 60)
+        message = data.get("message", "")
+        
+        # Get all teachers under this principal's school
+        school = session.get("school", "")
+        logger.info(f"Looking for teachers in school: '{school}'")
+        
+        # Debug the session data
+        logger.info(f"Principal session data: {session}")
+        
+        # Check if there are any teachers in the database at all
+        total_teachers = users_collection.count_documents({"role": "teacher"})
+        logger.info(f"Total teachers in database: {total_teachers}")
+        
+        # Check if there are teachers for this school specifically
+        school_teachers = users_collection.count_documents({"school": school, "role": "teacher"})
+        logger.info(f"Teachers for this school '{school}': {school_teachers}")
+        
+        teachers = list(users_collection.find({"school": school, "role": "teacher"}))
+        
+        if not teachers:
+            return jsonify({"status": "fail", "message": "No teachers found for your school"})
+            
+        # Track counts for reporting
+        total_teachers = len(teachers)
+        warnings_sent = 0
+        
+        # For each teacher, check attendance and progress
+        for teacher in teachers:
+            teacher_email = teacher.get("email")
+            if not teacher_email:
+                continue
+                
+            # Calculate attendance
+            attendance_data = calculate_teacher_attendance(teacher_email)
+            attendance_percentage = attendance_data.get("monthly_percentage", 0)
+            
+            # Get progress
+            progress = get_or_initialize_progress(
+                teacher_email, 
+                teacher.get("class", "class9"),
+                teacher.get("subject", "science")
+            )
+            progress_percentage = progress.get("percentage", 0)
+            
+            # Check if warning needed
+            needs_warning = (attendance_percentage < attendance_threshold or 
+                            progress_percentage < progress_threshold)
+                            
+            if needs_warning:
+                # Create warning message
+                warning_data = {
+                    "teacher_email": teacher_email,
+                    "teacher_name": teacher.get("name", ""),
+                    "sent_by": session.get("name", "Principal"),
+                    "principal_email": session.get("email", ""),
+                    "message": message,
+                    "attendance_percentage": attendance_percentage,
+                    "progress_percentage": progress_percentage,
+                    "sent_at": datetime.now(),
+                    "read": False
+                }
+                
+                # Save to warnings collection (create if doesn't exist)
+                if "warnings" not in db.list_collection_names():
+                    db.create_collection("warnings")
+                
+                warnings_collection = db["warnings"]
+                warnings_collection.insert_one(warning_data)
+                
+                # Update count
+                warnings_sent += 1
+                
+                # Log the warning
+                logger.info(f"Warning sent to {teacher_email} by {session.get('email')}")
+        
+        return jsonify({
+            "status": "success", 
+            "message": f"Warnings sent to {warnings_sent} of {total_teachers} teachers",
+            "warnings_sent": warnings_sent,
+            "total_teachers": total_teachers
+        })
+            
+    except Exception as e:
+        logger.error(f"Error sending warnings: {e}")
+        return jsonify({
+            "status": "fail", 
+            "message": f"An error occurred: {str(e)}"
+        })
+
+@app.route("/api/teacher_warnings")
+def get_teacher_warnings():
+    """API route to get warnings for the logged in teacher"""
+    if "email" not in session:
+        return jsonify({"status": "fail", "message": "Please login first"})
+    
+    try:
+        teacher_email = session.get("email")
+        
+        # Get warnings for this teacher
+        warnings_collection = db["warnings"]
+        
+        # Check if collection exists yet
+        if "warnings" not in db.list_collection_names():
+            return jsonify({
+                "status": "success",
+                "warnings": []
+            })
+        
+        # Find all warnings for this teacher
+        warnings = list(warnings_collection.find(
+            {"teacher_email": teacher_email}
+        ).sort("sent_at", -1))
+        
+        # Convert ObjectId to string for JSON serialization
+        for warning in warnings:
+            if "_id" in warning:
+                warning["_id"] = str(warning["_id"])
+            if "sent_at" in warning:
+                warning["sent_at"] = warning["sent_at"].strftime("%Y-%m-%d %H:%M:%S")
+        
+        # Mark warnings as read
+        warnings_collection.update_many(
+            {"teacher_email": teacher_email, "read": False},
+            {"$set": {"read": True}}
+        )
+        
+        return jsonify({
+            "status": "success",
+            "warnings": warnings
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting teacher warnings: {e}")
+        return jsonify({
+            "status": "fail",
+            "message": f"An error occurred: {str(e)}"
+        })
+
+@app.route("/api/unread_warnings_count")
+def get_unread_warnings_count():
+    """API route to get count of unread warnings for the logged in teacher"""
+    if "email" not in session:
+        return jsonify({"status": "fail", "message": "Please login first"})
+    
+    try:
+        teacher_email = session.get("email")
+        
+        # Get warnings for this teacher
+        if "warnings" not in db.list_collection_names():
+            return jsonify({
+                "status": "success",
+                "count": 0
+            })
+            
+        warnings_collection = db["warnings"]
+        
+        # Count unread warnings
+        count = warnings_collection.count_documents({
+            "teacher_email": teacher_email,
+            "read": False
+        })
+        
+        return jsonify({
+            "status": "success",
+            "count": count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting unread warnings count: {e}")
+        return jsonify({
+            "status": "fail",
+            "message": f"An error occurred: {str(e)}"
+        })
+
 if __name__ == '__main__':
     # Create test user for easy login
     create_test_users()
     
     # Initialize curriculum data for all classes and subjects
     initialize_curriculum()
+    
+    # Schedule weekly feedback calls for testing
+    logger.info("Scheduling initial feedback calls for testing...")
+    schedule_weekly_feedback_calls()
     
     # Run the application
     logger.info("Starting Flask application...")
