@@ -63,7 +63,7 @@
       </div>
   
     <!-- Login Form -->
-    <form id="login-form" class="space-y-6">
+    <form id="login-form" class="space-y-6" method="POST" action="/login">
         <h2 class="text-3xl font-bold text-center text-yellow-400">Login to EduPulse</h2>
         <input type="email" name="email" placeholder="Email" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
         <input type="password" name="password" placeholder="Password" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
@@ -207,7 +207,7 @@
       alert(result.message);
   
       if (result.status === 'success') {
-        window.location.href = '/dashboard'; // replace with your target page
+        window.location.href = '/teacher_dashboard'; // replace with your target page
       }
     });
   
@@ -228,6 +228,15 @@
         document.getElementById("show-login").click(); // Switch to login form
       }
     });
+  </script>
+  <script>
+  if (result.status === 'success') {
+  window.location.href = '/teacher_dashboard';
+}
+
+
+
+
   </script>
   
 </body>

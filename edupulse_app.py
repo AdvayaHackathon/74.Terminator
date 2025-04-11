@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_bcrypt import Bcrypt
 from pymongo import MongoClient
@@ -13,7 +13,7 @@ bcrypt = Bcrypt(app)
 client = MongoClient("mongodb://localhost:27017")
 db = client['edupulse_db']  # Database name
 contact_collection = db['contact_messages']  # Collection name
-users = db['users']
+users_collection = db["users"]  # ✅ Define this here
 
 @app.route('/')
 def index():
@@ -50,26 +50,33 @@ def signup():
     email = request.form['email']
     password = generate_password_hash(request.form['password'])
 
-    if users.find_one({"email": email}):
+    if users_collection.find_one({"email": email}):
         return jsonify({"status": "fail", "message": "Email already registered."})
 
-    users.insert_one({"name": name, "email": email, "password": password})
+    users_collection.insert_one({"name": name, "email": email, "password": password})
     return jsonify({"status": "success", "message": "Signup successful!"})
 
-@app.route('/login', methods=['POST'])
+
+@app.route("/login", methods=["POST"])
 def login():
-    email = request.form['email']
-    password = request.form['password']
-    user = users.find_one({"email": email})
+    email = request.form["email"]
+    password = request.form["password"]
 
-    if user and check_password_hash(user['password'], password):
-        return jsonify({"status": "success", "message": f"Welcome {user['name']}!"})
-    else:
-        return jsonify({"status": "fail", "message": "Invalid credentials."})
+    user = users_collection.find_one({"email": email})
 
-@app.route('/dashboard')
+    if user and check_password_hash(user["password"], password):
+        session["email"] = user["email"]
+        return jsonify({"status": "success", "message": "Login successful!"})
+    
+    return jsonify({"status": "fail", "message": "Invalid email or password."})
+
+
+@app.route("/teacher_dashboard")
 def teacher_dashboard():
+    if "email" not in session:
+        return redirect(url_for("login"))
     return render_template("teacher_dashboard.html")
+
 
 if __name__ == '__main__':
     app.run(debug=True)
