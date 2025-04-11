@@ -156,6 +156,7 @@ def signup():
         "teacher_id": teacher_id,
         "subject": subject,
         "class": class_level,
+        "role": "teacher",
         "created_at": datetime.now()
     })
     
