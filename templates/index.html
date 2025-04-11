@@ -9,16 +9,100 @@
   <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/vanta@0.5.21/dist/vanta.waves.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static//index.css">
 </head>
+
+<!-- 🌟 Navigation Bar 🌟 -->
+<header class="fixed top-0 left-0 w-full z-50 bg-transparent backdrop-blur-sm shadow-md">
+    <div class="max-w-7xl mx-auto flex justify-between items-center px-6 py-4">
+      <h1 class="text-2xl font-extrabold tracking-wide text-white">EduPulse</h1>
+      
+      <!-- Desktop Menu -->
+      <nav class="hidden md:flex space-x-8 text-white text-lg font-medium">
+        <a href="{{ url_for('index') }}" class="hover:text-yellow-400">Home</a>
+        <a href="{{ url_for('about') }}" class="hover:text-yellow-400">About</a>
+        <a href="{{ url_for('contact') }}" class="hover:scale-110 transform transition duration-300 hover:text-yellow-400">Contact Us</a>
+      </nav>
+  
+      <!-- Mobile Menu Toggle -->
+      <div class="md:hidden flex items-center">
+        <button id="menu-btn" class="text-white text-3xl focus:outline-none">&#9776;</button>
+      </div>
+    </div>
+  
+    <!-- Mobile Dropdown -->
+    <div id="menu" class="hidden md:hidden bg-gray-900 bg-opacity-90 text-white text-center py-4 space-y-4">
+      <a href="{{ url_for('index') }}" class="block hover:text-yellow-300">Home</a>
+      <a href="{{ url_for('about') }}" class="block hover:text-yellow-300">About</a>
+      <a href="{{ url_for('contact') }}" class="block hover:text-yellow-300">Contact Us</a>
+    </div>
+  </header>
+  
 <body class="text-white font-sans">
 
   <!-- Animated Hero Section -->
   <div id="hero" class="vanta-bg flex items-center justify-center flex-col text-center">
     <h1 class="text-5xl md:text-7xl font-bold z-10" data-aos="zoom-in">EduPulse</h1>
     <p class="text-xl mt-4 z-10" data-aos="fade-up">Empowering Teachers, Transforming Rural Education</p>
-    <a href="#features" class="mt-6 px-6 py-3 bg-blue-500 text-white rounded-full shadow-lg z-10 hover:bg-blue-600 transition-all">Explore Now</a>
+    <a href="#auth" class="px-8 py-3 bg-yellow-400 text-black font-bold rounded-full shadow-lg hover:scale-105 transition-all duration-300 scroll-smooth">Register Now</a>
   </div>
+  </section>
+  
+    <!-- 🔐 Auth Section -->
+<section id="auth" class="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] text-white relative overflow-hidden">
+
+    <!-- Glassy Container -->
+    <div class="relative z-10 w-[90%] max-w-3xl p-10 bg-white/10 backdrop-blur-md rounded-3xl shadow-2xl border border-white/20 transition-all duration-500">
+      
+      <!-- Toggle Buttons -->
+      <div class="flex justify-center mb-8 space-x-4">
+        <button id="show-login" class="px-6 py-2 bg-blue-600 text-white rounded-full font-semibold hover:bg-blue-500 transition">Login</button>
+        <button id="show-signup" class="px-6 py-2 bg-gray-500 text-white rounded-full font-semibold hover:bg-gray-400 transition">Signup</button>
+      </div>
+  
+    <!-- Login Form -->
+    <form id="login-form" class="space-y-6">
+        <h2 class="text-3xl font-bold text-center text-yellow-400">Login to EduPulse</h2>
+        <input type="email" name="email" placeholder="Email" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
+        <input type="password" name="password" placeholder="Password" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
+        <button type="submit" class="w-full py-3 bg-yellow-400 text-black font-bold rounded-xl hover:scale-105 transition duration-300">Login</button>
+        <p class="text-sm text-right text-blue-300 hover:underline cursor-pointer">Forgot Password?</p>
+    </form>
+    
+    <!-- Signup Form -->
+    <form id="signup-form" class="space-y-6 hidden">
+        <h2 class="text-3xl font-bold text-center text-yellow-400">Sign Up for EduPulse</h2>
+        <input type="text" name="name" placeholder="Full Name" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
+        <input type="email" name="email" placeholder="Email" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
+        <input type="password" name="password" placeholder="Password" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
+        <button type="submit" class="w-full py-3 bg-yellow-400 text-black font-bold rounded-xl hover:scale-105 transition duration-300">Sign Up</button>
+    </form>
+    
+    </div>
+  </section>
+  
+  <!-- 🔁 Toggle Logic -->
+  <script>
+    const loginBtn = document.getElementById('show-login');
+    const signupBtn = document.getElementById('show-signup');
+    const loginForm = document.getElementById('login-form');
+    const signupForm = document.getElementById('signup-form');
+  
+    loginBtn.addEventListener('click', () => {
+      loginForm.classList.remove('hidden');
+      signupForm.classList.add('hidden');
+    });
+  
+    signupBtn.addEventListener('click', () => {
+      signupForm.classList.remove('hidden');
+      loginForm.classList.add('hidden');
+    });
+  </script>
+  
+    
+
 
   <!-- Mission -->
   <section class="section bg-gray-900" id="mission">
@@ -65,6 +149,11 @@
       </div>
     </div>
   </section>
+  <!-- Contact Section -->
+  <section id="contact" class="section bg-blue-900 text-white">
+    <h2 class="text-3xl font-bold mb-4">Contact Us</h2>
+    <p>Email: edupulse@education.in | Phone: +91 9876543210</p>
+  </section>
 
   <!-- Call to Action -->
   <section class="section bg-gradient-to-r from-blue-600 to-indigo-700 text-center">
@@ -72,6 +161,7 @@
     <a href="/login" class="px-8 py-3 bg-white text-blue-700 rounded-full font-semibold shadow-xl hover:bg-gray-100 transition">Get Started</a>
   </section>
 
+  
   <!-- Footer -->
   <footer class="bg-gray-800 py-6 text-center text-sm text-gray-400">
     Built with 💙 by Team EduPulse | © 2025 Hackathon
@@ -93,6 +183,52 @@
       waveSpeed: 0.5,
       zoom: 1.0
     });
+     // Mobile Menu Toggle
+  const menuBtn = document.getElementById("menu-btn");
+  const menu = document.getElementById("menu");
+
+  menuBtn.addEventListener("click", () => {
+    menu.classList.toggle("hidden");
+  });
   </script>
+
+<script>
+    // LOGIN handler
+    document.getElementById('login-form').addEventListener('submit', async function (e) {
+      e.preventDefault();
+  
+      const formData = new FormData(this);
+      const response = await fetch('/login', {
+        method: 'POST',
+        body: formData
+      });
+  
+      const result = await response.json();
+      alert(result.message);
+  
+      if (result.status === 'success') {
+        window.location.href = '/dashboard'; // replace with your target page
+      }
+    });
+  
+    // SIGNUP handler
+    document.getElementById('signup-form').addEventListener('submit', async function (e) {
+      e.preventDefault();
+  
+      const formData = new FormData(this);
+      const response = await fetch('/signup', {
+        method: 'POST',
+        body: formData
+      });
+  
+      const result = await response.json();
+      alert(result.message);
+  
+      if (result.status === 'success') {
+        document.getElementById("show-login").click(); // Switch to login form
+      }
+    });
+  </script>
+  
 </body>
 </html>

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>About - EduPulse</title>
+
+  <!-- TailwindCSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Animate.css -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+
+  <!-- Vanta Background Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.net.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white">
+
+  <!-- 🌟 Navigation Bar -->
+  <header class="fixed top-0 left-0 w-full z-50 bg-transparent backdrop-blur-sm shadow-md">
+    <div class="max-w-7xl mx-auto flex justify-between items-center px-6 py-4">
+      <h1 class="text-2xl font-extrabold tracking-wide text-white">EduPulse</h1>
+      <nav class="hidden md:flex space-x-8 text-white text-lg font-medium">
+        <a href="/" class="hover:scale-110 transform transition duration-300 hover:text-yellow-400">Home</a>
+        <a href="/about" class="hover:scale-110 transform transition duration-300 hover:text-yellow-400">About</a>
+        <a href="/contact" class="hover:scale-110 transform transition duration-300 hover:text-yellow-400">Contact Us</a>
+      </nav>
+      <div class="md:hidden flex items-center">
+        <button id="menu-btn" class="text-white text-3xl focus:outline-none">&#9776;</button>
+      </div>
+    </div>
+    <div id="menu" class="hidden md:hidden bg-gray-900 bg-opacity-90 text-white text-center py-4 space-y-4">
+      <a href="/" class="block hover:text-yellow-300">Home</a>
+      <a href="/about" class="block hover:text-yellow-300">About</a>
+      <a href="#contact" class="block hover:text-yellow-300">Contact Us</a>
+    </div>
+  </header>
+
+  <!-- About Section -->
+  <section id="about" class="vanta-bg min-h-screen flex items-center justify-center px-6 pt-24 pb-16 text-center relative">
+    <div class="z-10 max-w-4xl">
+      <h2 class="text-5xl font-extrabold mb-6 animate__animated animate__fadeInDown">About EduPulse</h2>
+      <p class="text-xl animate__animated animate__fadeInUp">
+        EduPulse is a revolutionary platform created to reduce school dropout rates in rural India. We empower teachers with the training and tools they need to create value-based education, improve attendance monitoring, and ensure students stay engaged.
+        <br><br>
+        With interactive teacher training, syllabus completion tracking, and parental involvement, EduPulse aims to ignite curiosity and long-term education goals in rural communities — especially for young girls and underserved areas.
+      </p>
+    </div>
+  </section>
+
+  <!-- Vanta Background Script -->
+  <script>
+    VANTA.NET({
+      el: ".vanta-bg",
+      mouseControls: true,
+      touchControls: true,
+      minHeight: 200.00,
+      minWidth: 200.00,
+      scale: 1.00,
+      scaleMobile: 1.00,
+      color: 0xffffff,
+      backgroundColor: 0x0f172a,
+      points: 12.00,
+      maxDistance: 25.00,
+      spacing: 15.00
+    });
+
+    const menuBtn = document.getElementById("menu-btn");
+    const menu = document.getElementById("menu");
+    menuBtn.addEventListener("click", () => {
+      menu.classList.toggle("hidden");
+    });
+  </script>
+</body>
+</html>
