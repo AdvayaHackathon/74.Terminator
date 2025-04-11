@@ -262,6 +262,36 @@
           </div>
         </div>
       </div>
+      {% elif weekly_schedule and weekly_schedule|length > 0 and weekly_schedule[0].is_today %}
+      <div id="today-activity" class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md mb-10 animate__animated animate__fadeInDown">
+        <h3 class="text-2xl font-bold text-yellow-300 mb-4">Today's Activity</h3>
+        <div class="bg-gray-800 rounded-xl p-5 border border-yellow-500/20">
+          <div class="flex flex-col md:flex-row items-center md:items-start gap-4">
+            <div class="w-16 h-16 rounded-full flex items-center justify-center bg-{{ activity_types[weekly_schedule[0].activity.activity_type].color }} bg-opacity-20 flex-shrink-0">
+              <i class="{{ activity_types[weekly_schedule[0].activity.activity_type].icon }} text-{{ activity_types[weekly_schedule[0].activity.activity_type].color }} text-2xl"></i>
+            </div>
+            <div class="flex-grow">
+              <h4 class="text-xl font-semibold text-white">{{ weekly_schedule[0].activity.activity_title }}</h4>
+              <p class="text-gray-300 mt-1">
+                Module: {{ weekly_schedule[0].activity.module_title }} | 
+                Activity Type: {{ weekly_schedule[0].activity.activity_type.title() }}
+              </p>
+              <div class="mt-4">
+                <form class="complete-activity-form">
+                  <input type="hidden" name="activity_id" value="{{ weekly_schedule[0].activity.activity_id }}">
+                  <input type="hidden" name="activity_type" value="{{ weekly_schedule[0].activity.activity_type }}">
+                  <input type="hidden" name="activity_title" value="{{ weekly_schedule[0].activity.activity_title }}">
+                  <input type="hidden" name="class_level" value="{{ current_class }}">
+                  <button type="submit" 
+                    class="px-5 py-2 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-semibold rounded-lg shadow hover:from-yellow-400 hover:to-yellow-500 transition-all duration-300 active:scale-95">
+                    Mark as Completed & Record Attendance
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       {% else %}
       <div id="today-activity" class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md mb-10 animate__animated animate__fadeInDown">
         <h3 class="text-2xl font-bold text-yellow-300 mb-4">Today's Activity</h3>
@@ -269,8 +299,20 @@
           <p class="text-white">{{ daily_activity.message }}</p>
           <p class="text-gray-300 mt-2">{{ "Congratulations! You've completed all activities for this course." if daily_activity.message == "All activities completed" else "" }}</p>
         {% else %}
-          <p class="text-white">No activities available for today</p>
-          <p class="text-gray-300 mt-2">Please try selecting a different class or check back later.</p>
+          <div class="text-center">
+            <div class="w-16 h-16 rounded-full bg-blue-500 bg-opacity-20 flex items-center justify-center mx-auto mb-4">
+              <i class="fas fa-calendar-day text-blue-500 text-2xl"></i>
+            </div>
+            <h4 class="text-xl font-semibold text-white">No Activity Available</h4>
+            <p class="text-gray-300 mt-2">We couldn't find any activities for you today.</p>
+            <p class="text-gray-400 text-sm mt-4">Please try selecting a different class or subject.</p>
+            <div class="mt-4">
+              <a href="{{ url_for('teacher_dashboard', class_level='class9') }}" 
+                 class="inline-block px-5 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                 Try Class 9
+              </a>
+            </div>
+          </div>
         {% endif %}
       </div>
       {% endif %}
@@ -424,6 +466,15 @@
         </div>
       </div>
       {% endif %}
+
+      <!-- Debug Info (will only be visible when debugging is needed) -->
+      <div id="debug-info" class="bg-gray-900 p-4 rounded-lg mt-4 text-xs text-gray-500 overflow-auto max-h-40 hidden">
+        <h4 class="font-bold">Debug Info</h4>
+        <p><strong>Daily Activity:</strong> {{ daily_activity }}</p>
+        <p><strong>Today Activity Available:</strong> {{ daily_activity and daily_activity.activity != None }}</p>
+        <p><strong>Weekly Schedule Available:</strong> {{ weekly_schedule and weekly_schedule|length > 0 }}</p>
+        <p><strong>Today in Weekly Schedule:</strong> {{ weekly_schedule and weekly_schedule|length > 0 and weekly_schedule[0].is_today }}</p>
+      </div>
     </div>
   </section>
 
@@ -442,6 +493,15 @@
       points: 12.00,
       maxDistance: 25.00,
       spacing: 15.00
+    });
+
+    // Toggle debug info when pressing Ctrl+D
+    document.addEventListener('keydown', function(e) {
+      if (e.ctrlKey && e.key === 'd') {
+        const debugInfo = document.getElementById('debug-info');
+        debugInfo.classList.toggle('hidden');
+        e.preventDefault();
+      }
     });
 
     // Function to mark an activity as completed

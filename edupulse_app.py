@@ -190,9 +190,11 @@ def teacher_dashboard(class_level=None):
         
         # Get today's random activity
         daily_activity = get_daily_activity(session["email"], current_class, subject)
+        logger.info(f"Daily activity data: {daily_activity}")
         
         # Generate weekly schedule
         weekly_schedule = generate_weekly_schedule(session["email"], current_class, subject)
+        logger.info(f"Weekly schedule generated with {len(weekly_schedule)} days")
         
         return render_template(
             "teacher_dashboard.html", 
@@ -665,6 +667,61 @@ def initialize_curriculum():
                     curriculum_collection.insert_one(curriculum_data)
             
             logger.info(f"Curriculum initialized for {len(classes)} classes and {len(subjects)} subjects")
+        else:
+            # Ensure all class-subject combinations have curriculum data
+            classes = ["class8", "class9", "class10"]
+            subjects = ["science", "social_science", "english", "mathematics"]
+            
+            for class_level in classes:
+                for subject in subjects:
+                    # Check if this class-subject combination exists
+                    existing = curriculum_collection.find_one({
+                        "class": class_level,
+                        "subject": subject
+                    })
+                    
+                    if not existing:
+                        logger.info(f"Adding missing curriculum for {class_level} {subject}")
+                        
+                        # Create curriculum data with modules for this class-subject combination
+                        modules = [
+                            {
+                                "module_id": 1,
+                                "title": f"Introduction to {subject.replace('_', ' ').title()}",
+                                "activities": [
+                                    {"activity_id": 1, "type": "video", "title": "Course Overview", "duration": 15},
+                                    {"activity_id": 2, "type": "pdf", "title": "Reading Materials", "duration": 30},
+                                    {"activity_id": 3, "type": "quiz", "title": "Basic Concepts Quiz", "duration": 20},
+                                    {"activity_id": 4, "type": "interactive", "title": "Engage with Concepts", "duration": 25}
+                                ]
+                            },
+                            {
+                                "module_id": 2,
+                                "title": "Core Concepts",
+                                "activities": [
+                                    {"activity_id": 5, "type": "video", "title": "Key Principles", "duration": 20},
+                                    {"activity_id": 6, "type": "interactive", "title": "Hands-on Exercise", "duration": 35},
+                                    {"activity_id": 7, "type": "discussion", "title": "Group Discussion", "duration": 40},
+                                    {"activity_id": 8, "type": "quiz", "title": "Progress Check", "duration": 15}
+                                ]
+                            }
+                        ]
+                        
+                        # Calculate total activities and duration
+                        total_activities = sum(len(module["activities"]) for module in modules)
+                        total_duration = sum(activity["duration"] for module in modules for activity in module["activities"])
+                        
+                        curriculum_data = {
+                            "class": class_level,
+                            "subject": subject,
+                            "title": f"{class_level.replace('class', 'Class ')} {subject.replace('_', ' ').title()}",
+                            "modules": modules,
+                            "total_activities": total_activities,
+                            "total_duration": total_duration,
+                            "created_at": datetime.now()
+                        }
+                        
+                        curriculum_collection.insert_one(curriculum_data)
     except Exception as e:
         logger.error(f"Error initializing curriculum: {e}")
 
@@ -873,15 +930,43 @@ def get_daily_activity(teacher_email, class_level, subject):
     try:
         today = datetime.now().date()
         today_str = today.strftime("%Y-%m-%d")
+        yesterday = today - timedelta(days=1)
+        yesterday_str = yesterday.strftime("%Y-%m-%d")
         
-        # Check if we already completed today's activity
-        completed_today = activities_collection.find_one({
+        # Check if we already have an assigned activity for today (completed or not)
+        today_activity = activities_collection.find_one({
             "teacher_email": teacher_email,
+            "class": class_level,
+            "subject": subject,
             "date_str": today_str
         })
         
-        if completed_today:
-            return {"completed": True, "activity": None, "message": "Today's activity already completed"}
+        # If there's an activity for today that's completed, return it
+        if today_activity and today_activity.get("status") == "completed":
+            logger.info(f"Found completed activity for today: {today_activity}")
+            return {
+                "completed": True, 
+                "activity": {
+                    "activity_id": today_activity.get("activity_id", 0),
+                    "activity_title": today_activity.get("activity_title", "Unknown Activity"),
+                    "activity_type": today_activity.get("activity_type", "quiz"),
+                    "module_title": today_activity.get("module_title", "Completed Activity"),
+                }, 
+                "message": "Today's activity already completed"
+            }
+        # If there's an assigned but not completed activity, return it
+        elif today_activity and today_activity.get("status") == "assigned":
+            logger.info(f"Found assigned activity for today: {today_activity}")
+            return {
+                "completed": False, 
+                "activity": {
+                    "activity_id": today_activity.get("activity_id", 0),
+                    "activity_title": today_activity.get("activity_title", "Unknown Activity"),
+                    "activity_type": today_activity.get("activity_type", "quiz"),
+                    "module_title": today_activity.get("module_title", "Assigned Activity"),
+                }, 
+                "message": "Today's activity ready"
+            }
         
         # Get teacher's progress
         progress = course_progress_collection.find_one({
@@ -897,21 +982,76 @@ def get_daily_activity(teacher_email, class_level, subject):
                 logger.error(f"Failed to get or initialize progress for {teacher_email}, {class_level}, {subject}")
                 return {"completed": False, "activity": None, "message": "No curriculum found"}
         
-        # Get all incomplete activities
-        incomplete_activities = []
+        # Get all incomplete activities grouped by type
+        activities_by_type = {
+            "quiz": [],
+            "video": [],
+            "interactive": [],
+            "pdf": [],
+            "discussion": []
+        }
+        
+        # Track total activities found
+        total_activities_found = 0
+        
         for module in progress.get("modules_progress", []):
             for activity in module.get("activities", []):
+                total_activities_found += 1
                 if not activity.get("completed", True):
-                    incomplete_activities.append({
-                        "module_id": module.get("module_id", 0),
-                        "module_title": module.get("title", "Unknown Module"),
-                        "activity_id": activity.get("activity_id", 0),
-                        "activity_title": activity.get("title", "Unknown Activity"),
-                        "activity_type": activity.get("type", "quiz")
-                    })
+                    activity_type = activity.get("type", "quiz")
+                    if activity_type in activities_by_type:
+                        activities_by_type[activity_type].append({
+                            "module_id": module.get("module_id", 0),
+                            "module_title": module.get("title", "Unknown Module"),
+                            "activity_id": activity.get("activity_id", 0),
+                            "activity_title": activity.get("title", "Unknown Activity"),
+                            "activity_type": activity_type
+                        })
+        
+        # Get all incomplete activities
+        incomplete_activities = []
+        for activities in activities_by_type.values():
+            incomplete_activities.extend(activities)
+        
+        logger.info(f"Found {len(incomplete_activities)} incomplete activities out of {total_activities_found} total")
         
         if not incomplete_activities:
-            return {"completed": False, "activity": None, "message": "All activities completed"}
+            if total_activities_found > 0:
+                return {"completed": False, "activity": None, "message": "All activities completed"}
+            else:
+                return {"completed": False, "activity": None, "message": "No activities found for this class and subject"}
+        
+        # Check what activity type was assigned yesterday
+        yesterday_activity = activities_collection.find_one({
+            "teacher_email": teacher_email,
+            "class": class_level,
+            "subject": subject,
+            "date_str": yesterday_str
+        })
+        
+        yesterday_activity_type = yesterday_activity.get("activity_type", None) if yesterday_activity else None
+        
+        # Get available activity types that have activities and aren't the same as yesterday
+        available_types = []
+        for activity_type, activities in activities_by_type.items():
+            if activities and activity_type != yesterday_activity_type:
+                available_types.append(activity_type)
+        
+        # If no other types are available, use any type with activities
+        if not available_types:
+            available_types = [t for t, activities in activities_by_type.items() if activities]
+        
+        # Get previously assigned activities from the past 7 days to avoid repetition
+        recent_date = today - timedelta(days=7)
+        recent_activities = list(activities_collection.find({
+            "teacher_email": teacher_email,
+            "class": class_level,
+            "subject": subject,
+            "completion_date": {"$gte": datetime.combine(recent_date, datetime.min.time())}
+        }))
+        
+        # Extract activity IDs that were recently completed
+        recent_activity_ids = [act.get("activity_id") for act in recent_activities if act.get("activity_id")]
         
         # Use the date as a seed for random selection to ensure the same activity is shown all day
         import random
@@ -919,8 +1059,64 @@ def get_daily_activity(teacher_email, class_level, subject):
         seed = f"{today_str}_{teacher_email}"
         random.seed(seed)
         
-        # Select one random activity for today
-        daily_activity = random.choice(incomplete_activities)
+        # Randomly select an activity type for today, preferring one different from yesterday
+        if available_types:
+            selected_type = random.choice(available_types)
+            
+            # Filter out recently completed activities for variety
+            fresh_activities = [
+                act for act in activities_by_type[selected_type] 
+                if act["activity_id"] not in recent_activity_ids
+            ]
+            
+            # If no fresh activities are available, use all activities of this type
+            if not fresh_activities:
+                fresh_activities = activities_by_type[selected_type]
+            
+            # Select one random activity for today
+            daily_activity = random.choice(fresh_activities)
+        else:
+            # Fallback to any incomplete activity
+            # Filter out recently completed activities for variety
+            fresh_activities = [act for act in incomplete_activities if act["activity_id"] not in recent_activity_ids]
+            
+            # If no fresh activities are available, use all incomplete activities
+            if not fresh_activities:
+                fresh_activities = incomplete_activities
+            
+            # Select one random activity for today
+            daily_activity = random.choice(fresh_activities)
+        
+        # Store today's assigned activity in a separate collection for reference
+        try:
+            today_assignment = {
+                "teacher_email": teacher_email,
+                "class": class_level,
+                "subject": subject,
+                "activity_id": daily_activity["activity_id"],
+                "activity_type": daily_activity["activity_type"],
+                "activity_title": daily_activity["activity_title"],
+                "module_title": daily_activity["module_title"],
+                "assigned_date": today,
+                "date_str": today_str,
+                "status": "assigned",
+                "completed": False,
+                "created_at": datetime.now()
+            }
+            assign_result = activities_collection.update_one(
+                {
+                    "teacher_email": teacher_email,
+                    "class": class_level, 
+                    "subject": subject,
+                    "date_str": today_str,
+                    "status": "assigned"
+                },
+                {"$setOnInsert": today_assignment},
+                upsert=True
+            )
+            logger.info(f"Activity assignment result: matched={assign_result.matched_count}, modified={assign_result.modified_count}, upserted={assign_result.upserted_id is not None}")
+        except Exception as e:
+            logger.warning(f"Failed to store today's activity assignment: {e}")
         
         return {"completed": False, "activity": daily_activity, "message": "Today's activity ready"}
     
@@ -1033,20 +1229,34 @@ def generate_weekly_schedule(teacher_email, class_level, subject):
                 logger.error(f"No progress found for {teacher_email} in {class_level} {subject}")
                 return []
         
-        # Get all incomplete activities
-        incomplete_activities = []
+        # Get all incomplete activities grouped by type
+        activities_by_type = {
+            "quiz": [],
+            "video": [],
+            "interactive": [],
+            "pdf": [],
+            "discussion": []
+        }
+        
         for module in progress.get("modules_progress", []):
             for activity in module.get("activities", []):
                 if not activity.get("completed", True):
-                    incomplete_activities.append({
-                        "module_id": module.get("module_id", 0),
-                        "module_title": module.get("title", "Unknown Module"),
-                        "activity_id": activity.get("activity_id", 0),
-                        "activity_title": activity.get("title", "Unknown Activity"),
-                        "activity_type": activity.get("type", "quiz")
-                    })
+                    activity_type = activity.get("type", "quiz")
+                    if activity_type in activities_by_type:
+                        activities_by_type[activity_type].append({
+                            "module_id": module.get("module_id", 0),
+                            "module_title": module.get("title", "Unknown Module"),
+                            "activity_id": activity.get("activity_id", 0),
+                            "activity_title": activity.get("title", "Unknown Activity"),
+                            "activity_type": activity_type
+                        })
         
-        if not incomplete_activities:
+        # Check if we have activities available
+        all_incomplete_activities = []
+        for activities in activities_by_type.values():
+            all_incomplete_activities.extend(activities)
+            
+        if not all_incomplete_activities:
             logger.info(f"No incomplete activities found for {teacher_email} in {class_level} {subject}")
             return []
         
@@ -1056,6 +1266,33 @@ def generate_weekly_schedule(teacher_email, class_level, subject):
         
         today = datetime.now().date()
         start_of_week = today - timedelta(days=today.weekday())  # Monday
+        end_of_week = start_of_week + timedelta(days=6)  # Sunday
+        
+        # Get all assigned activities for the current week to maintain consistency
+        this_week_activities = list(activities_collection.find({
+            "teacher_email": teacher_email,
+            "class": class_level,
+            "subject": subject,
+            "$or": [
+                {"status": "assigned"},
+                {"status": "completed"}
+            ],
+            "date_str": {
+                "$gte": start_of_week.strftime("%Y-%m-%d"),
+                "$lte": end_of_week.strftime("%Y-%m-%d")
+            }
+        }).sort("date_str", 1))  # Sort by date
+        
+        # Create a map of date -> activity_id for already assigned/completed activities
+        existing_activities_map = {}
+        for act in this_week_activities:
+            existing_activities_map[act.get("date_str")] = {
+                "activity_id": act.get("activity_id"),
+                "activity_title": act.get("activity_title"),
+                "activity_type": act.get("activity_type"),
+                "module_title": act.get("module_title", "Unknown Module"),
+                "completed": act.get("status") == "completed"
+            }
         
         # Use the week number and teacher email as the seed for consistent random generation
         week_number = start_of_week.isocalendar()[1]  # Week number of the year
@@ -1067,43 +1304,155 @@ def generate_weekly_schedule(teacher_email, class_level, subject):
         weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
         weekly_schedule = []
         
-        # Randomly select activities for each day, without repetition if possible
+        # Track assigned activity IDs and types to prevent duplicates
+        assigned_activity_ids = [act.get("activity_id") for act in this_week_activities if act.get("activity_id")]
+        assigned_activity_types = []
+        
+        # Get existing activity types for this week to maintain consistency
+        for day_str, activity in existing_activities_map.items():
+            if activity.get("activity_type") and activity.get("activity_type") not in assigned_activity_types:
+                assigned_activity_types.append(activity.get("activity_type"))
+        
+        # Define a priority list of activity types to ensure variety
+        activity_types_priority = ["quiz", "video", "interactive", "pdf", "discussion"]
+        
+        # Shuffle the priority list using the seed for consistency
+        activity_types_copy = activity_types_priority.copy()
+        random.shuffle(activity_types_copy)
+        
+        # Randomly select activities for each day, ensuring different types
         try:
-            selected_activities = random.sample(
-                incomplete_activities, 
-                min(len(incomplete_activities), len(weekdays))
-            )
-            
-            # If we don't have enough activities, repeat some
-            if len(selected_activities) < len(weekdays):
-                additional_needed = len(weekdays) - len(selected_activities)
-                additional_activities = random.choices(incomplete_activities, k=additional_needed)
-                selected_activities.extend(additional_activities)
-            
-            # Assign activities to days
+            # For days that already have activities assigned, use those
+            # For days that don't have activities assigned, select new ones
             for i, day in enumerate(weekdays):
                 day_date = start_of_week + timedelta(days=i)
+                day_str = day_date.strftime("%Y-%m-%d")
                 is_past = day_date < today
                 is_today = day_date == today
                 
-                # Check if this day's activity is already completed
-                completed = False
-                if is_past or is_today:
-                    completed_activity = activities_collection.find_one({
-                        "teacher_email": teacher_email,
-                        "date_str": day_date.strftime("%Y-%m-%d")
+                # Check if this day already has an activity assigned
+                if day_str in existing_activities_map:
+                    activity = existing_activities_map[day_str]
+                    completed = activity.get("completed", False)
+                    
+                    # If this was already assigned or completed, use that activity
+                    weekly_schedule.append({
+                        "day": day,
+                        "date": day_date,
+                        "date_str": day_str,
+                        "activity": {
+                            "activity_id": activity.get("activity_id"),
+                            "activity_title": activity.get("activity_title"),
+                            "activity_type": activity.get("activity_type"),
+                            "module_title": activity.get("module_title")
+                        },
+                        "is_past": is_past,
+                        "is_today": is_today,
+                        "completed": completed
                     })
-                    completed = bool(completed_activity)
-                
-                weekly_schedule.append({
-                    "day": day,
-                    "date": day_date,
-                    "date_str": day_date.strftime("%Y-%m-%d"),
-                    "activity": selected_activities[i],
-                    "is_past": is_past,
-                    "is_today": is_today,
-                    "completed": completed
-                })
+                    
+                    # Make sure we don't reuse this activity for other days
+                    if activity.get("activity_id") not in assigned_activity_ids:
+                        assigned_activity_ids.append(activity.get("activity_id"))
+                else:
+                    # Need to assign a new activity for this day
+                    # Try to find an activity type that hasn't been used yet this week
+                    available_types = [t for t in activity_types_copy if t not in assigned_activity_types]
+                    
+                    if not available_types:
+                        # If all types have been used, allow repeating but prioritize types with the most activities
+                        available_types = sorted(
+                            activities_by_type.keys(), 
+                            key=lambda t: len(activities_by_type[t]), 
+                            reverse=True
+                        )
+                    
+                    # Take the first available type with activities
+                    selected_type = None
+                    for activity_type in available_types:
+                        if activities_by_type[activity_type]:
+                            selected_type = activity_type
+                            break
+                    
+                    # If no activities of the preferred types, pick any type with activities
+                    if not selected_type:
+                        for activity_type, activities in activities_by_type.items():
+                            if activities:
+                                selected_type = activity_type
+                                break
+                    
+                    # If still no activities found, use any incomplete activity
+                    if not selected_type or not activities_by_type[selected_type]:
+                        # Choose random activity from all incomplete
+                        random_activity = random.choice(all_incomplete_activities)
+                        selected_type = random_activity["activity_type"]
+                    
+                    # Get available activities of this type that haven't been assigned yet
+                    available_activities = [
+                        a for a in activities_by_type[selected_type] 
+                        if a["activity_id"] not in assigned_activity_ids
+                    ]
+                    
+                    # If no available activities of this type, use any activities of this type
+                    if not available_activities:
+                        available_activities = activities_by_type[selected_type]
+                    
+                    # Select a random activity for this day
+                    activity = random.choice(available_activities)
+                    
+                    # Add to assigned tracking
+                    assigned_activity_ids.append(activity["activity_id"])
+                    assigned_activity_types.append(selected_type)
+                    
+                    # For future days, check if there's any record of completion
+                    completed = False
+                    if is_past or is_today:
+                        completed_activity = activities_collection.find_one({
+                            "teacher_email": teacher_email,
+                            "date_str": day_str,
+                            "status": "completed"
+                        })
+                        completed = bool(completed_activity)
+                    
+                    # Store this assignment in the activities collection for future reference
+                    if not is_past:  # Don't create assignments for past dates
+                        try:
+                            day_assignment = {
+                                "teacher_email": teacher_email,
+                                "class": class_level,
+                                "subject": subject,
+                                "activity_id": activity["activity_id"],
+                                "activity_type": activity["activity_type"],
+                                "activity_title": activity["activity_title"],
+                                "module_title": activity["module_title"],
+                                "assigned_date": day_date,
+                                "date_str": day_str,
+                                "status": "assigned",
+                                "completed": completed,
+                                "created_at": datetime.now()
+                            }
+                            activities_collection.update_one(
+                                {
+                                    "teacher_email": teacher_email,
+                                    "date_str": day_str,
+                                    "status": "assigned"
+                                },
+                                {"$setOnInsert": day_assignment},
+                                upsert=True
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to store activity assignment for {day_str}: {e}")
+                    
+                    weekly_schedule.append({
+                        "day": day,
+                        "date": day_date,
+                        "date_str": day_str,
+                        "activity": activity,
+                        "is_past": is_past,
+                        "is_today": is_today,
+                        "completed": completed
+                    })
+            
         except Exception as e:
             logger.error(f"Error generating weekly days: {e}")
             return []
