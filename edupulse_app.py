@@ -8,6 +8,7 @@ import traceback
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 import logging
+import calendar
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -40,6 +41,7 @@ except (ConnectionFailure, ServerSelectionTimeoutError) as e:
 db = client['edupulse_db']
 contact_collection = db['contact_messages']
 users_collection = db["users"]
+principals_collection = db["principals"]
 attendance_collection = db["attendance"]
 activities_collection = db["activities"]
 daily_attendance_collection = db["daily_attendance"]
@@ -67,8 +69,8 @@ def verify_db_connection():
         logger.error(f"Database connection error: {e}")
         return False
 
-# Make sure we have at least one test user
-def create_test_user():
+# Make sure we have at least one test user and principal
+def create_test_users():
     try:
         # Check if test user exists
         if not users_collection.find_one({"email": "teacher@example.com"}):
@@ -81,12 +83,27 @@ def create_test_user():
                 "teacher_id": "TEST001",
                 "subject": "science",
                 "class": "class9",
+                "role": "teacher",
                 "created_at": datetime.now()
             }
             users_collection.insert_one(test_user)
             logger.info("Created test user: teacher@example.com with password: password123")
+            
+        # Check if test principal exists
+        if not principals_collection.find_one({"email": "principal@example.com"}):
+            # Create a test principal
+            test_principal = {
+                "name": "Test Principal",
+                "email": "principal@example.com",
+                "password": generate_password_hash("admin123"),
+                "school": "Test School",
+                "role": "principal",
+                "created_at": datetime.now()
+            }
+            principals_collection.insert_one(test_principal)
+            logger.info("Created test principal: principal@example.com with password: admin123")
     except Exception as e:
-        logger.error(f"Error creating test user: {e}")
+        logger.error(f"Error creating test users: {e}")
 
 @app.route('/')
 def index():
@@ -149,6 +166,7 @@ def login():
     email = request.form["email"]
     password = request.form["password"]
 
+    # First check if this is a teacher
     user = users_collection.find_one({"email": email})
 
     if user and check_password_hash(user["password"], password):
@@ -158,7 +176,18 @@ def login():
         session["school"] = user.get("school", "")
         session["subject"] = user.get("subject", "")
         session["class"] = user.get("class", "")
-        return jsonify({"status": "success", "message": "Login successful!"})
+        session["role"] = "teacher"
+        return jsonify({"status": "success", "message": "Login successful!", "redirect": "/teacher_dashboard"})
+    
+    # If not a teacher, check if it's a principal
+    principal = principals_collection.find_one({"email": email})
+    
+    if principal and check_password_hash(principal["password"], password):
+        session["email"] = principal["email"]
+        session["name"] = principal["name"]
+        session["school"] = principal.get("school", "")
+        session["role"] = "principal"
+        return jsonify({"status": "success", "message": "Login successful!", "redirect": "/principal_dashboard"})
     
     return jsonify({"status": "fail", "message": "Invalid email or password."})
 
@@ -196,6 +225,10 @@ def teacher_dashboard(class_level=None):
         weekly_schedule = generate_weekly_schedule(session["email"], current_class, subject)
         logger.info(f"Weekly schedule generated with {len(weekly_schedule)} days")
         
+        # Calculate attendance percentage for current month
+        attendance_data = calculate_teacher_attendance(session["email"])
+        logger.info(f"Attendance data: {attendance_data}")
+        
         return render_template(
             "teacher_dashboard.html", 
             progress=progress,
@@ -203,7 +236,8 @@ def teacher_dashboard(class_level=None):
             daily_activity=daily_activity,
             weekly_schedule=weekly_schedule,
             current_class=current_class,
-            activity_types=ACTIVITY_TYPES
+            activity_types=ACTIVITY_TYPES,
+            attendance=attendance_data
         )
     except Exception as e:
         logger.error(f"Error loading dashboard: {e}")
@@ -1463,9 +1497,347 @@ def generate_weekly_schedule(teacher_email, class_level, subject):
         logger.error(f"Error generating weekly schedule: {e}")
         return []
 
+# Calculate attendance percentage for a teacher for the current month
+def calculate_teacher_attendance(teacher_email):
+    try:
+        # Get current month and year
+        current_date = datetime.now()
+        current_month = current_date.month
+        current_year = current_date.year
+        
+        # Get the first and last day of the current month
+        last_day = calendar.monthrange(current_year, current_month)[1]
+        first_day_of_month = datetime(current_year, current_month, 1)
+        last_day_of_month = datetime(current_year, current_month, last_day)
+        
+        # First, check if we have monthly stats already calculated
+        monthly_stats = teacher_monthly_stats.find_one({
+            "teacher_email": teacher_email,
+            "year": current_year,
+            "month": current_month
+        })
+        
+        if monthly_stats and "days_present" in monthly_stats:
+            # Get total working days so far this month (exclude weekends)
+            today = current_date.day
+            working_days = 0
+            for day in range(1, today + 1):
+                day_date = datetime(current_year, current_month, day)
+                # Skip weekends (5 is Saturday, 6 is Sunday)
+                if day_date.weekday() not in [5, 6]:
+                    working_days += 1
+            
+            # Calculate attendance percentage
+            days_present = monthly_stats.get("days_present", 0)
+            if working_days > 0:
+                attendance_percentage = min(round((days_present / working_days) * 100), 100)
+            else:
+                attendance_percentage = 0
+                
+            return {
+                "percentage": attendance_percentage,
+                "days_present": days_present,
+                "working_days": working_days,
+                "month": current_date.strftime("%B")
+            }
+        
+        # If no monthly stats, calculate from daily attendance records
+        attendance_records = list(daily_attendance_collection.find({
+            "teacher_email": teacher_email,
+            "date": {
+                "$gte": first_day_of_month,
+                "$lte": last_day_of_month
+            },
+            "status": "present"
+        }))
+        
+        # Count distinct days with attendance
+        days_present = len(set(record.get("date_str") for record in attendance_records))
+        
+        # Get total working days so far this month (exclude weekends)
+        today = current_date.day
+        working_days = 0
+        for day in range(1, today + 1):
+            day_date = datetime(current_year, current_month, day)
+            # Skip weekends (5 is Saturday, 6 is Sunday)
+            if day_date.weekday() not in [5, 6]:
+                working_days += 1
+        
+        # Calculate attendance percentage
+        if working_days > 0:
+            attendance_percentage = min(round((days_present / working_days) * 100), 100)
+        else:
+            attendance_percentage = 0
+        
+        return {
+            "percentage": attendance_percentage,
+            "days_present": days_present,
+            "working_days": working_days,
+            "month": current_date.strftime("%B")
+        }
+    
+    except Exception as e:
+        logger.error(f"Error calculating attendance: {e}")
+        return {
+            "percentage": 0,
+            "days_present": 0,
+            "working_days": 0,
+            "month": current_date.strftime("%B")
+        }
+
+# Get teacher stats for principal dashboard
+def get_teacher_stats():
+    try:
+        # Get current date info
+        current_date = datetime.now()
+        today_str = current_date.strftime("%Y-%m-%d")
+        
+        # Count total teachers
+        total_count = users_collection.count_documents({"role": "teacher"})
+        
+        # Count teachers present today
+        present_today = daily_attendance_collection.count_documents({
+            "date_str": today_str,
+            "status": "present"
+        })
+        
+        # Calculate average attendance percentage across all teachers
+        # First, get all teachers
+        teachers = list(users_collection.find({"role": "teacher"}))
+        
+        if teachers:
+            # Calculate attendance for each teacher
+            attendance_sum = 0
+            for teacher in teachers:
+                attendance_data = calculate_teacher_attendance(teacher["email"])
+                attendance_sum += attendance_data["percentage"]
+            
+            avg_attendance = round(attendance_sum / len(teachers))
+        else:
+            avg_attendance = 0
+        
+        # Count total activities completed this month
+        month_start = datetime(current_date.year, current_date.month, 1)
+        total_activities = activities_collection.count_documents({
+            "status": "completed",
+            "completion_date": {"$gte": month_start}
+        })
+        
+        return {
+            "total_count": total_count,
+            "present_today": present_today,
+            "avg_attendance": avg_attendance,
+            "total_activities": total_activities
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting teacher stats: {e}")
+        return {
+            "total_count": 0,
+            "present_today": 0,
+            "avg_attendance": 0,
+            "total_activities": 0
+        }
+
+# Get chart data for principal dashboard
+def get_chart_data():
+    try:
+        # Get the last 7 days for weekly attendance chart
+        current_date = datetime.now().date()
+        dates = []
+        attendance_counts = []
+        
+        for i in range(6, -1, -1):
+            date = current_date - timedelta(days=i)
+            date_str = date.strftime("%Y-%m-%d")
+            dates.append(date.strftime("%a"))
+            
+            # Count attendance for this day
+            count = daily_attendance_collection.count_documents({
+                "date_str": date_str,
+                "status": "present"
+            })
+            attendance_counts.append(count)
+        
+        # Get activity type distribution
+        activity_counts = {
+            "quiz": activities_collection.count_documents({"activity_type": "quiz", "status": "completed"}),
+            "video": activities_collection.count_documents({"activity_type": "video", "status": "completed"}),
+            "interactive": activities_collection.count_documents({"activity_type": "interactive", "status": "completed"}),
+            "pdf": activities_collection.count_documents({"activity_type": "pdf", "status": "completed"}),
+            "discussion": activities_collection.count_documents({"activity_type": "discussion", "status": "completed"})
+        }
+        
+        activity_types = [
+            activity_counts["quiz"],
+            activity_counts["video"],
+            activity_counts["interactive"],
+            activity_counts["pdf"],
+            activity_counts["discussion"]
+        ]
+        
+        return {
+            "weekly_dates": dates,
+            "attendance_counts": attendance_counts,
+            "activity_types": activity_types
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting chart data: {e}")
+        return {
+            "weekly_dates": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+            "attendance_counts": [0, 0, 0, 0, 0, 0, 0],
+            "activity_types": [0, 0, 0, 0, 0]
+        }
+
+# Get teacher list with performance metrics for principal dashboard
+def get_teacher_performance():
+    try:
+        teachers = list(users_collection.find({"role": "teacher"}))
+        teacher_performance = []
+        
+        for teacher in teachers:
+            # Get attendance percentage
+            attendance_data = calculate_teacher_attendance(teacher["email"])
+            
+            # Get progress percentage (use most recent class-subject combination if multiple)
+            progress = course_progress_collection.find_one(
+                {"teacher_email": teacher["email"]},
+                sort=[("updated_at", -1)]
+            )
+            
+            # Get last active timestamp
+            last_activity = activities_collection.find_one(
+                {"teacher_email": teacher["email"]},
+                sort=[("created_at", -1)]
+            )
+            
+            teacher_info = {
+                "name": teacher["name"],
+                "email": teacher["email"],
+                "subject": teacher.get("subject", ""),
+                "class": teacher.get("class", ""),
+                "attendance_percentage": attendance_data["percentage"],
+                "progress_percentage": progress["progress_percentage"] if progress else 0,
+                "last_active": last_activity["created_at"] if last_activity else None
+            }
+            
+            teacher_performance.append(teacher_info)
+        
+        return teacher_performance
+    
+    except Exception as e:
+        logger.error(f"Error getting teacher performance: {e}")
+        return []
+
+@app.route("/principal_dashboard")
+def principal_dashboard():
+    if "email" not in session or session.get("role") != "principal":
+        return redirect(url_for("login"))
+    
+    try:
+        # Get teacher statistics
+        teacher_stats = get_teacher_stats()
+        
+        # Get chart data
+        chart_data = get_chart_data()
+        
+        # Get teacher performance metrics
+        teachers = get_teacher_performance()
+        
+        return render_template(
+            "principal_dashboard.html",
+            teacher_stats=teacher_stats,
+            chart_data=chart_data,
+            teachers=teachers
+        )
+    
+    except Exception as e:
+        logger.error(f"Error loading principal dashboard: {e}")
+        return render_template(
+            "principal_dashboard.html",
+            error_message="We encountered an error loading your dashboard. Please try again later.",
+            teacher_stats={"total_count": 0, "present_today": 0, "avg_attendance": 0, "total_activities": 0},
+            chart_data={"weekly_dates": [], "attendance_counts": [], "activity_types": []},
+            teachers=[]
+        )
+
+@app.route("/logout")
+def logout():
+    # Clear all session data
+    session.clear()
+    return redirect(url_for("index"))
+
+@app.route("/add_teacher", methods=["POST"])
+def add_teacher():
+    # Check if user is logged in and is a principal
+    if "email" not in session or session.get("role") != "principal":
+        logger.warning("Unauthorized attempt to add teacher")
+        return jsonify({"status": "fail", "message": "Unauthorized access"})
+    
+    try:
+        # Get form data
+        name = request.form.get("name")
+        email = request.form.get("email")
+        password = request.form.get("password")
+        school = request.form.get("school")
+        teacher_id = request.form.get("teacher_id")
+        subject = request.form.get("subject")
+        class_level = request.form.get("class")
+        
+        # Validate required fields
+        if not all([name, email, password, school, teacher_id, subject, class_level]):
+            return jsonify({"status": "fail", "message": "All fields are required"})
+        
+        # Check if email already exists
+        if users_collection.find_one({"email": email}):
+            return jsonify({"status": "fail", "message": "Email already registered"})
+        
+        # Check if teacher ID already exists
+        if users_collection.find_one({"teacher_id": teacher_id}):
+            return jsonify({"status": "fail", "message": "Teacher ID already registered"})
+        
+        # Hash the password
+        hashed_password = generate_password_hash(password)
+        
+        # Create teacher document
+        teacher_data = {
+            "name": name,
+            "email": email,
+            "password": hashed_password,
+            "school": school,
+            "teacher_id": teacher_id,
+            "subject": subject,
+            "class": class_level,
+            "role": "teacher",
+            "created_at": datetime.now(),
+            "created_by": session.get("email")
+        }
+        
+        # Insert into database
+        result = users_collection.insert_one(teacher_data)
+        
+        if result.inserted_id:
+            logger.info(f"New teacher added: {email} by principal: {session.get('email')}")
+            
+            # Initialize progress for the new teacher
+            get_or_initialize_progress(email, class_level, subject)
+            
+            return jsonify({
+                "status": "success", 
+                "message": f"Teacher {name} added successfully"
+            })
+        else:
+            logger.error("Failed to insert new teacher")
+            return jsonify({"status": "fail", "message": "Failed to add teacher"})
+            
+    except Exception as e:
+        logger.error(f"Error adding teacher: {str(e)}")
+        return jsonify({"status": "fail", "message": f"An error occurred: {str(e)}"})
+
 if __name__ == '__main__':
     # Create test user for easy login
-    create_test_user()
+    create_test_users()
     
     # Initialize curriculum data for all classes and subjects
     initialize_curriculum()

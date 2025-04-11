@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Principal Dashboard - EduPulse</title>
+
+  <!-- TailwindCSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Animate.css -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
+  <!-- Vanta Background Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.net.min.js"></script>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* Progress circle */
+    .circle-progress-container {
+      position: relative;
+      width: 150px;
+      height: 150px;
+    }
+    
+    .circle-progress {
+      transform: rotate(-90deg);
+      transform-origin: center;
+    }
+    
+    .progress-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    /* Cards */
+    .stats-card {
+      transition: all 0.3s ease;
+    }
+    
+    .stats-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+  <!-- Navbar -->
+  <header class="fixed top-0 left-0 w-full z-50 bg-transparent backdrop-blur-sm shadow-md">
+    <div class="max-w-7xl mx-auto flex justify-between items-center px-6 py-4">
+      <h1 class="text-2xl font-extrabold tracking-wide text-white">EduPulse <span class="text-yellow-400">Admin</span></h1>
+      <nav class="hidden md:flex space-x-8 text-white text-lg font-medium">
+        <a href="{{ url_for('index') }}" class="hover:text-yellow-400">Home</a>
+        <a href="{{ url_for('about') }}" class="hover:text-yellow-400">About</a>
+        <a href="{{ url_for('contact') }}" class="hover:text-yellow-400">Contact</a>
+        <a href="{{ url_for('principal_dashboard') }}" class="hover:text-yellow-400">Dashboard</a>
+        <a href="/logout" class="hover:text-yellow-400">Logout</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Dashboard Section -->
+  <section class="vanta-bg min-h-screen flex flex-col pt-28 pb-16 px-6 relative z-10">
+    <div class="max-w-7xl mx-auto">
+      <!-- Profile Header -->
+      <div class="bg-white bg-opacity-10 rounded-2xl p-6 mb-10 backdrop-blur-lg shadow-lg animate__animated animate__fadeInDown">
+        <div class="flex flex-col md:flex-row md:justify-between md:items-center">
+          <div>
+            <h2 class="text-3xl font-bold text-yellow-300">Welcome, {{ session.name }}</h2>
+            <p class="mt-2 text-white">School: {{ session.school }} | Role: Principal</p>
+            <p class="mt-4 text-gray-300">
+              You have <span class="text-blue-400 font-semibold">{{ teacher_stats.total_count }}</span> teachers registered, 
+              <span class="text-green-400 font-semibold">{{ teacher_stats.present_today }}</span> present today, and 
+              <span class="text-yellow-400 font-semibold">{{ teacher_stats.total_activities }}</span> total activities completed.
+            </p>
+          </div>
+          <div class="mt-4 md:mt-0">
+            <button onclick="showAddTeacherModal()" class="bg-yellow-500 hover:bg-yellow-400 text-black font-bold px-6 py-3 rounded-xl transition duration-300 flex items-center">
+              <i class="fas fa-user-plus mr-2"></i> Add New Teacher
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error Message (if any) -->
+      {% if error_message %}
+      <div class="bg-red-500 bg-opacity-20 border border-red-500 p-4 rounded-lg mb-10 text-center animate__animated animate__fadeIn">
+        <div class="flex items-center justify-center">
+          <i class="fas fa-exclamation-triangle text-red-500 text-2xl mr-3"></i>
+          <p class="text-white">{{ error_message }}</p>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Summary Stats -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10 animate__animated animate__fadeInUp">
+        <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md hover:scale-105 transition stats-card">
+          <div class="flex items-center mb-2">
+            <div class="w-12 h-12 rounded-full bg-blue-500 bg-opacity-20 flex items-center justify-center mr-4">
+              <i class="fas fa-user-tie text-blue-500 text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-white">Total Teachers</h3>
+              <p class="text-3xl font-bold text-blue-400">{{ teacher_stats.total_count }}</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md hover:scale-105 transition stats-card">
+          <div class="flex items-center mb-2">
+            <div class="w-12 h-12 rounded-full bg-green-500 bg-opacity-20 flex items-center justify-center mr-4">
+              <i class="fas fa-check-circle text-green-500 text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-white">Present Today</h3>
+              <p class="text-3xl font-bold text-green-400">{{ teacher_stats.present_today }}</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md hover:scale-105 transition stats-card">
+          <div class="flex items-center mb-2">
+            <div class="w-12 h-12 rounded-full bg-yellow-500 bg-opacity-20 flex items-center justify-center mr-4">
+              <i class="fas fa-calendar-check text-yellow-500 text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-white">Avg. Attendance</h3>
+              <p class="text-3xl font-bold text-yellow-400">{{ teacher_stats.avg_attendance }}%</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md hover:scale-105 transition stats-card">
+          <div class="flex items-center mb-2">
+            <div class="w-12 h-12 rounded-full bg-purple-500 bg-opacity-20 flex items-center justify-center mr-4">
+              <i class="fas fa-tasks text-purple-500 text-xl"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-white">Activities</h3>
+              <p class="text-3xl font-bold text-purple-400">{{ teacher_stats.total_activities }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts Row -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+        <!-- Attendance Chart -->
+        <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md animate__animated animate__fadeInLeft">
+          <h3 class="text-xl font-semibold text-yellow-300 mb-4">Weekly Attendance</h3>
+          <canvas id="attendanceChart" height="250"></canvas>
+        </div>
+        
+        <!-- Activity Types Chart -->
+        <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md animate__animated animate__fadeInRight">
+          <h3 class="text-xl font-semibold text-yellow-300 mb-4">Activity Distribution</h3>
+          <canvas id="activityChart" height="250"></canvas>
+        </div>
+      </div>
+
+      <!-- Registered Teachers Section -->
+      <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md mb-10 animate__animated animate__fadeInUp">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="text-2xl font-bold text-yellow-300">Registered Teachers</h3>
+          <div class="text-sm text-gray-300 bg-blue-500 bg-opacity-30 px-4 py-2 rounded-full">
+            Total: <span class="font-bold">{{ teachers|length }}</span>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {% for teacher in teachers %}
+          <div class="bg-white bg-opacity-5 rounded-xl p-4 hover:bg-opacity-10 transition duration-300 border border-gray-700">
+            <div class="flex items-center mb-3">
+              <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center mr-3">
+                <span class="text-xl font-bold text-white">{{ teacher.name[:1] }}</span>
+              </div>
+              <div>
+                <div class="font-medium text-white text-lg">{{ teacher.name }}</div>
+                <div class="text-sm text-gray-400">{{ teacher.email }}</div>
+              </div>
+            </div>
+            <div class="space-y-3 mt-4">
+              <div class="flex justify-between text-sm">
+                <span class="text-gray-400">Subject:</span>
+                <span class="text-white font-medium">{{ teacher.subject.replace('_', ' ').title() if teacher.subject else 'N/A' }}</span>
+              </div>
+              <div class="flex justify-between text-sm">
+                <span class="text-gray-400">Class:</span>
+                <span class="text-white font-medium">{{ teacher.class.replace('class', 'Class ') if teacher.class else 'N/A' }}</span>
+              </div>
+              <div class="space-y-1">
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-400">Progress:</span>
+                  <span class="text-white font-medium">{{ teacher.progress_percentage }}%</span>
+                </div>
+                <div class="w-full bg-gray-700 rounded-full h-2">
+                  <div class="bg-gradient-to-r from-yellow-500 to-yellow-300 h-2 rounded-full" style="width: {{ teacher.progress_percentage }}%"></div>
+                </div>
+              </div>
+              <div class="space-y-1">
+                <div class="flex justify-between text-sm">
+                  <span class="text-gray-400">Attendance:</span>
+                  <span class="text-white font-medium">{{ teacher.attendance_percentage }}%</span>
+                </div>
+                <div class="w-full bg-gray-700 rounded-full h-2">
+                  <div class="bg-gradient-to-r from-green-500 to-green-300 h-2 rounded-full" style="width: {{ teacher.attendance_percentage }}%"></div>
+                </div>
+              </div>
+              <div class="flex justify-between text-sm">
+                <span class="text-gray-400">Last Active:</span>
+                <span class="text-white">{{ teacher.last_active.strftime('%d %b, %H:%M') if teacher.last_active else 'Never' }}</span>
+              </div>
+              <div class="mt-4 text-center">
+                <button onclick="showTeacherDetails('{{ teacher.email }}')" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm transition duration-300 w-full">
+                  View Detailed Progress
+                </button>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Teacher List with Performance -->
+      <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md mb-10 animate__animated animate__fadeInUp">
+        <h3 class="text-2xl font-bold text-yellow-300 mb-4">Teacher Performance</h3>
+        
+        <div class="overflow-x-auto">
+          <table class="min-w-full bg-white bg-opacity-5 rounded-lg">
+            <thead>
+              <tr class="text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                <th class="px-6 py-3">Teacher</th>
+                <th class="px-6 py-3">Subject</th>
+                <th class="px-6 py-3">Class</th>
+                <th class="px-6 py-3">Attendance</th>
+                <th class="px-6 py-3">Progress</th>
+                <th class="px-6 py-3">Last Active</th>
+                <th class="px-6 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700">
+              {% for teacher in teachers %}
+              <tr class="hover:bg-white hover:bg-opacity-5">
+                <td class="px-6 py-4">
+                  <div class="flex items-center">
+                    <div class="w-10 h-10 rounded-full bg-blue-500 bg-opacity-20 flex items-center justify-center mr-3">
+                      <span class="text-lg font-bold text-blue-400">{{ teacher.name[:1] }}</span>
+                    </div>
+                    <div>
+                      <div class="font-medium text-white">{{ teacher.name }}</div>
+                      <div class="text-sm text-gray-400">{{ teacher.email }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-6 py-4 text-white">{{ teacher.subject.replace('_', ' ').title() if teacher.subject else 'N/A' }}</td>
+                <td class="px-6 py-4 text-white">{{ teacher.class.replace('class', 'Class ') if teacher.class else 'N/A' }}</td>
+                <td class="px-6 py-4">
+                  <div class="flex items-center">
+                    <div class="w-full bg-gray-700 rounded-full h-2 max-w-xs">
+                      <div class="bg-green-500 h-2 rounded-full" style="width: {{ teacher.attendance_percentage }}%"></div>
+                    </div>
+                    <span class="ml-2 text-white">{{ teacher.attendance_percentage }}%</span>
+                  </div>
+                </td>
+                <td class="px-6 py-4">
+                  <div class="flex items-center">
+                    <div class="w-full bg-gray-700 rounded-full h-2 max-w-xs">
+                      <div class="bg-yellow-500 h-2 rounded-full" style="width: {{ teacher.progress_percentage }}%"></div>
+                    </div>
+                    <span class="ml-2 text-white">{{ teacher.progress_percentage }}%</span>
+                  </div>
+                </td>
+                <td class="px-6 py-4 text-gray-300">{{ teacher.last_active.strftime('%d %b, %H:%M') if teacher.last_active else 'Never' }}</td>
+                <td class="px-6 py-4">
+                  <a href="#" class="text-blue-400 hover:text-blue-300">View Details</a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Vanta.js Background -->
+  <script>
+    VANTA.NET({
+      el: ".vanta-bg",
+      mouseControls: true,
+      touchControls: true,
+      minHeight: 200.00,
+      minWidth: 200.00,
+      scale: 1.00,
+      scaleMobile: 1.00,
+      color: 0x3f83f8,
+      backgroundColor: 0x0f172a,
+      points: 12.00,
+      maxDistance: 25.00,
+      spacing: 15.00
+    });
+
+    // Attendance Chart
+    const attendanceCtx = document.getElementById('attendanceChart').getContext('2d');
+    const attendanceChart = new Chart(attendanceCtx, {
+      type: 'line',
+      data: {
+        labels: {{ chart_data.weekly_dates | tojson }},
+        datasets: [{
+          label: 'Teacher Attendance',
+          data: {{ chart_data.attendance_counts | tojson }},
+          backgroundColor: 'rgba(59, 130, 246, 0.2)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 2,
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      options: {
+        scales: {
+          y: {
+            beginAtZero: true,
+            grid: {
+              color: 'rgba(255, 255, 255, 0.1)'
+            },
+            ticks: {
+              color: 'rgba(255, 255, 255, 0.7)'
+            }
+          },
+          x: {
+            grid: {
+              color: 'rgba(255, 255, 255, 0.1)'
+            },
+            ticks: {
+              color: 'rgba(255, 255, 255, 0.7)'
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: 'rgba(255, 255, 255, 0.7)'
+            }
+          }
+        }
+      }
+    });
+
+    // Activity Types Chart
+    const activityCtx = document.getElementById('activityChart').getContext('2d');
+    const activityChart = new Chart(activityCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Quiz', 'Video', 'Interactive', 'PDF', 'Discussion'],
+        datasets: [{
+          data: {{ chart_data.activity_types | tojson }},
+          backgroundColor: [
+            'rgba(59, 130, 246, 0.7)',
+            'rgba(239, 68, 68, 0.7)',
+            'rgba(16, 185, 129, 0.7)',
+            'rgba(245, 158, 11, 0.7)',
+            'rgba(139, 92, 246, 0.7)'
+          ],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        plugins: {
+          legend: {
+            position: 'right',
+            labels: {
+              color: 'rgba(255, 255, 255, 0.7)'
+            }
+          }
+        }
+      }
+    });
+  </script>
+
+  <!-- Add New Teacher Modal -->
+  <div id="addTeacherModal" class="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center hidden">
+    <div class="bg-gray-900 rounded-2xl border border-gray-700 p-6 max-w-2xl w-[90%] animate__animated animate__fadeInUp">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-2xl font-bold text-yellow-300">Add New Teacher</h3>
+        <button onclick="hideAddTeacherModal()" class="text-gray-400 hover:text-white">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <form id="addTeacherForm" class="space-y-4">
+        <div id="addTeacherStatus" class="hidden"></div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="teacher_name" class="block text-gray-300 mb-1">Full Name</label>
+            <input type="text" id="teacher_name" name="name" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white" required>
+          </div>
+          
+          <div>
+            <label for="teacher_email" class="block text-gray-300 mb-1">Email Address</label>
+            <input type="email" id="teacher_email" name="email" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white" required>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="teacher_id" class="block text-gray-300 mb-1">Teacher ID</label>
+            <input type="text" id="teacher_id" name="teacher_id" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white" required>
+          </div>
+          
+          <div>
+            <label for="school" class="block text-gray-300 mb-1">School</label>
+            <input type="text" id="school" name="school" value="{{ session.school }}" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white" required>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="subject" class="block text-gray-300 mb-1">Subject</label>
+            <select id="subject" name="subject" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white" required>
+              <option value="">Select Subject</option>
+              <option value="science">Science</option>
+              <option value="english">English</option>
+              <option value="social_science">Social Science</option>
+              <option value="mathematics">Mathematics</option>
+            </select>
+          </div>
+          
+          <div>
+            <label for="class" class="block text-gray-300 mb-1">Class</label>
+            <select id="class" name="class" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white" required>
+              <option value="">Select Class</option>
+              <option value="class8">Class 8</option>
+              <option value="class9">Class 9</option>
+              <option value="class10">Class 10</option>
+            </select>
+          </div>
+        </div>
+        
+        <div>
+          <label for="password" class="block text-gray-300 mb-1">Password</label>
+          <input type="password" id="password" name="password" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white" required>
+          <p class="text-xs text-gray-400 mt-1">Password should be at least 6 characters long</p>
+        </div>
+        
+        <div class="flex justify-end mt-6">
+          <button type="button" onclick="hideAddTeacherModal()" class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg mr-2">
+            Cancel
+          </button>
+          <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg">
+            Add Teacher
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Teacher Details Modal -->
+  <div id="teacherDetailsModal" class="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center hidden">
+    <div class="bg-gray-900 rounded-2xl border border-gray-700 p-6 max-w-4xl w-[90%] max-h-[90vh] overflow-y-auto animate__animated animate__fadeInUp">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-2xl font-bold text-yellow-300" id="modalTeacherName">Teacher Details</h3>
+        <button onclick="hideTeacherDetails()" class="text-gray-400 hover:text-white">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      
+      <div class="space-y-6">
+        <!-- Teacher Info -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-white bg-opacity-5 p-4 rounded-xl">
+            <p class="text-gray-400 text-sm">Subject</p>
+            <p class="text-white text-lg font-medium" id="modalSubject">-</p>
+          </div>
+          <div class="bg-white bg-opacity-5 p-4 rounded-xl">
+            <p class="text-gray-400 text-sm">Class</p>
+            <p class="text-white text-lg font-medium" id="modalClass">-</p>
+          </div>
+          <div class="bg-white bg-opacity-5 p-4 rounded-xl">
+            <p class="text-gray-400 text-sm">Attendance</p>
+            <p class="text-white text-lg font-medium" id="modalAttendance">-</p>
+          </div>
+          <div class="bg-white bg-opacity-5 p-4 rounded-xl">
+            <p class="text-gray-400 text-sm">Progress</p>
+            <p class="text-white text-lg font-medium" id="modalProgress">-</p>
+          </div>
+        </div>
+        
+        <!-- Curriculum Progress -->
+        <div class="bg-white bg-opacity-5 p-6 rounded-xl">
+          <h4 class="text-xl font-semibold text-yellow-300 mb-4">Curriculum Progress</h4>
+          <div class="space-y-4" id="curriculumProgressList">
+            <!-- Curriculum items will be loaded here -->
+            <div class="text-center text-gray-400">
+              <p>Select a teacher to view their curriculum progress</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Recent Activities -->
+        <div class="bg-white bg-opacity-5 p-6 rounded-xl">
+          <h4 class="text-xl font-semibold text-yellow-300 mb-4">Recent Activities</h4>
+          <div class="space-y-4" id="recentActivitiesList">
+            <!-- Activities will be loaded here -->
+            <div class="text-center text-gray-400">
+              <p>Select a teacher to view their recent activities</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Add New Teacher Modal Functions
+    function showAddTeacherModal() {
+      document.getElementById('addTeacherModal').classList.remove('hidden');
+      document.getElementById('addTeacherStatus').classList.add('hidden');
+      document.getElementById('addTeacherForm').reset();
+    }
+    
+    function hideAddTeacherModal() {
+      document.getElementById('addTeacherModal').classList.add('hidden');
+    }
+    
+    // Add new teacher form submission
+    document.getElementById('addTeacherForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(this);
+      
+      fetch('/add_teacher', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        const statusEl = document.getElementById('addTeacherStatus');
+        statusEl.classList.remove('hidden');
+        
+        if (data.status === "success") {
+          statusEl.innerHTML = `<div class="bg-green-500 bg-opacity-20 border border-green-500 text-green-300 p-3 rounded-lg">${data.message}</div>`;
+          
+          // Reload the page after 2 seconds to show the new teacher
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+        } else {
+          statusEl.innerHTML = `<div class="bg-red-500 bg-opacity-20 border border-red-500 text-red-300 p-3 rounded-lg">${data.message}</div>`;
+        }
+      })
+      .catch(error => {
+        console.error("Error:", error);
+        document.getElementById("addTeacherStatus").innerHTML = `<div class="bg-red-500 bg-opacity-20 border border-red-500 text-red-300 p-3 rounded-lg">An error occurred. Please try again.</div>`;
+      });
+    });
+    
+    // Function to show teacher details modal
+    function showTeacherDetails(email) {
+      // In a real application, you would fetch this data from the server
+      // For this demo, we'll use the data we already have
+      const teacherData = {{ teachers | tojson }}.find(teacher => teacher.email === email);
+      
+      if (teacherData) {
+        document.getElementById('modalTeacherName').textContent = teacherData.name;
+        document.getElementById('modalSubject').textContent = teacherData.subject ? teacherData.subject.replace('_', ' ').charAt(0).toUpperCase() + teacherData.subject.replace('_', ' ').slice(1) : 'N/A';
+        document.getElementById('modalClass').textContent = teacherData.class ? teacherData.class.replace('class', 'Class ') : 'N/A';
+        document.getElementById('modalAttendance').textContent = teacherData.attendance_percentage + '%';
+        document.getElementById('modalProgress').textContent = teacherData.progress_percentage + '%';
+        
+        // Simulate curriculum items (in a real app, fetch from server)
+        const curriculumItems = [
+          { unit: 'Unit 1: Introduction', progress: Math.min(100, teacherData.progress_percentage * 2), status: 'completed' },
+          { unit: 'Unit 2: Core Concepts', progress: Math.max(0, Math.min(100, (teacherData.progress_percentage - 50) * 2)), status: teacherData.progress_percentage > 50 ? 'in-progress' : 'not-started' },
+          { unit: 'Unit 3: Advanced Topics', progress: Math.max(0, (teacherData.progress_percentage - 75) * 4), status: teacherData.progress_percentage > 75 ? 'in-progress' : 'not-started' }
+        ];
+        
+        let curriculumHTML = '';
+        curriculumItems.forEach(item => {
+          const statusClass = item.status === 'completed' ? 'text-green-400' : 
+                             item.status === 'in-progress' ? 'text-yellow-400' : 'text-gray-400';
+          const statusText = item.status === 'completed' ? 'Completed' : 
+                            item.status === 'in-progress' ? 'In Progress' : 'Not Started';
+                              
+          curriculumHTML += `
+            <div class="bg-white bg-opacity-5 rounded-lg p-4 border border-gray-700">
+              <div class="flex justify-between items-center mb-2">
+                <h5 class="text-white font-medium">${item.unit}</h5>
+                <span class="${statusClass}">${statusText}</span>
+              </div>
+              <div class="w-full bg-gray-700 rounded-full h-2">
+                <div class="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full" style="width: ${item.progress}%"></div>
+              </div>
+              <p class="text-right text-sm text-gray-400 mt-1">${item.progress}%</p>
+            </div>
+          `;
+        });
+        
+        document.getElementById('curriculumProgressList').innerHTML = curriculumHTML;
+        
+        // Show modal
+        document.getElementById('teacherDetailsModal').classList.remove('hidden');
+      }
+    }
+    
+    // Function to hide teacher details modal
+    function hideTeacherDetails() {
+      document.getElementById('teacherDetailsModal').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>

@@ -63,8 +63,9 @@
       </div>
   
     <!-- Login Form -->
-    <form id="login-form" class="space-y-6" method="POST" action="/login">
+    <form id="loginForm" class="space-y-6">
         <h2 class="text-3xl font-bold text-center text-yellow-400">Login to EduPulse</h2>
+        <div id="loginStatus"></div>
         <input type="email" name="email" placeholder="Email" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
         <input type="password" name="password" placeholder="Password" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
         <button type="submit" class="w-full py-3 bg-yellow-400 text-black font-bold rounded-xl hover:scale-105 transition duration-300">Login</button>
@@ -102,17 +103,25 @@
   <script>
     const loginBtn = document.getElementById('show-login');
     const signupBtn = document.getElementById('show-signup');
-    const loginForm = document.getElementById('login-form');
+    const loginForm = document.getElementById('loginForm');
     const signupForm = document.getElementById('signup-form');
   
     loginBtn.addEventListener('click', () => {
       loginForm.classList.remove('hidden');
       signupForm.classList.add('hidden');
+      loginBtn.classList.add('bg-blue-600');
+      loginBtn.classList.remove('bg-gray-500');
+      signupBtn.classList.add('bg-gray-500');
+      signupBtn.classList.remove('bg-blue-600');
     });
   
     signupBtn.addEventListener('click', () => {
       signupForm.classList.remove('hidden');
       loginForm.classList.add('hidden');
+      signupBtn.classList.add('bg-blue-600');
+      signupBtn.classList.remove('bg-gray-500');
+      loginBtn.classList.add('bg-gray-500');
+      loginBtn.classList.remove('bg-blue-600');
     });
   </script>
   
@@ -209,21 +218,33 @@
 
 <script>
     // LOGIN handler
-    document.getElementById('login-form').addEventListener('submit', async function (e) {
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
       e.preventDefault();
-  
+      
       const formData = new FormData(this);
-      const response = await fetch('/login', {
+      
+      fetch('/login', {
         method: 'POST',
         body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === "success") {
+          document.getElementById("loginStatus").innerHTML = `<div class="bg-green-500 text-white p-4 rounded">${data.message}</div>`;
+          // Redirect based on response from server
+          if (data.redirect) {
+            window.location.href = data.redirect;
+          } else {
+            window.location.href = "/teacher_dashboard";
+          }
+        } else {
+          document.getElementById("loginStatus").innerHTML = `<div class="bg-red-500 text-white p-4 rounded">${data.message}</div>`;
+        }
+      })
+      .catch(error => {
+        console.error("Error:", error);
+        document.getElementById("loginStatus").innerHTML = `<div class="bg-red-500 text-white p-4 rounded">An error occurred. Please try again.</div>`;
       });
-  
-      const result = await response.json();
-      alert(result.message);
-  
-      if (result.status === 'success') {
-        window.location.href = '/teacher_dashboard'; // replace with your target page
-      }
     });
   
     // SIGNUP handler
@@ -244,15 +265,5 @@
       }
     });
   </script>
-  <script>
-  if (result.status === 'success') {
-  window.location.href = '/teacher_dashboard';
-}
-
-
-
-
-  </script>
-  
 </body>
 </html>
