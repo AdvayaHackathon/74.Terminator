@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EduPulse - Empowering Rural Classrooms</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/aos@2.3.4/dist/aos.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vanta@0.5.21/dist/vanta.waves.min.js"></script>
+  <link rel="stylesheet" href="/static//index.css">
+</head>
+<body class="text-white font-sans">
+
+  <!-- Animated Hero Section -->
+  <div id="hero" class="vanta-bg flex items-center justify-center flex-col text-center">
+    <h1 class="text-5xl md:text-7xl font-bold z-10" data-aos="zoom-in">EduPulse</h1>
+    <p class="text-xl mt-4 z-10" data-aos="fade-up">Empowering Teachers, Transforming Rural Education</p>
+    <a href="#features" class="mt-6 px-6 py-3 bg-blue-500 text-white rounded-full shadow-lg z-10 hover:bg-blue-600 transition-all">Explore Now</a>
+  </div>
+
+  <!-- Mission -->
+  <section class="section bg-gray-900" id="mission">
+    <div class="max-w-4xl mx-auto text-center" data-aos="fade-up">
+      <h2 class="text-4xl font-bold mb-4">Why EduPulse?</h2>
+      <p class="text-lg text-gray-300">In rural areas, many girls drop out of school by 9th grade. We believe trained teachers can inspire change. EduPulse equips educators with tools, training, and accountability to reduce dropout rates and build value-driven education.</p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section bg-gray-800" id="features">
+    <h2 class="text-center text-4xl font-bold mb-12" data-aos="fade-down">Features</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+      <div class="glass-card" data-aos="flip-left">
+        <h3 class="text-2xl font-semibold mb-2">Offline Attendance</h3>
+        <p>Mark attendance without internet using QR codes or face recognition – all synced automatically later.</p>
+      </div>
+      <div class="glass-card" data-aos="flip-up">
+        <h3 class="text-2xl font-semibold mb-2">Interactive Training</h3>
+        <p>Gamified teacher learning modules available offline, including local-language audio & video lessons.</p>
+      </div>
+      <div class="glass-card" data-aos="flip-right">
+        <h3 class="text-2xl font-semibold mb-2">Parent Engagement</h3>
+        <p>Printable reports + SMS updates to keep parents informed, even without smartphones.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Timeline / How It Works -->
+  <section class="section bg-gray-900">
+    <h2 class="text-center text-4xl font-bold mb-12" data-aos="fade-down">How It Works</h2>
+    <div class="max-w-4xl mx-auto space-y-8">
+      <div data-aos="fade-right">
+        <h3 class="text-2xl font-bold">1. Train Teachers</h3>
+        <p class="text-gray-300">Offline modules & micro-certifications ensure quality classroom delivery.</p>
+      </div>
+      <div data-aos="fade-left">
+        <h3 class="text-2xl font-bold">2. Track Attendance</h3>
+        <p class="text-gray-300">Low-tech attendance via QR/NFC synced with central dashboard.</p>
+      </div>
+      <div data-aos="fade-right">
+        <h3 class="text-2xl font-bold">3. Inspire Students</h3>
+        <p class="text-gray-300">Fun, story-based learning with teacher-led visuals and games.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Call to Action -->
+  <section class="section bg-gradient-to-r from-blue-600 to-indigo-700 text-center">
+    <h2 class="text-4xl font-bold mb-4" data-aos="zoom-in">Ready to Revolutionize Rural Education?</h2>
+    <a href="/login" class="px-8 py-3 bg-white text-blue-700 rounded-full font-semibold shadow-xl hover:bg-gray-100 transition">Get Started</a>
+  </section>
+
+  <!-- Footer -->
+  <footer class="bg-gray-800 py-6 text-center text-sm text-gray-400">
+    Built with 💙 by Team EduPulse | © 2025 Hackathon
+  </footer>
+
+  <script>
+    AOS.init();
+    VANTA.WAVES({
+      el: "#hero",
+      mouseControls: true,
+      touchControls: true,
+      minHeight: 200.00,
+      minWidth: 200.00,
+      scale: 1.00,
+      scaleMobile: 1.00,
+      color: 0x1a1a1a,
+      shininess: 50.00,
+      waveHeight: 15.00,
+      waveSpeed: 0.5,
+      zoom: 1.0
+    });
+  </script>
+</body>
+</html>
