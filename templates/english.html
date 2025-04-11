@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English Training - EduPulse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- Navbar (same as dashboard) -->
+    <header class="fixed top-0 left-0 w-full z-50 bg-transparent backdrop-blur-sm shadow-md">
+        <div class="max-w-7xl mx-auto flex justify-between items-center px-6 py-4">
+            <h1 class="text-2xl font-extrabold tracking-wide text-white">EduPulse</h1>
+            <nav class="hidden md:flex space-x-8 text-white text-lg font-medium">
+                <a href="{{ url_for('index') }}" class="hover:text-yellow-400">Home</a>
+                <a href="{{ url_for('teacher_dashboard') }}" class="hover:text-yellow-400">Dashboard</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="pt-24 pb-16 px-6">
+        <div class="max-w-6xl mx-auto">
+            <!-- Header Section -->
+            <div class="bg-white bg-opacity-10 rounded-2xl p-6 mb-10 backdrop-blur-lg shadow-lg">
+                <h2 class="text-3xl font-bold text-yellow-300">English Training</h2>
+                <p class="mt-2 text-white">Today's Activity - <span id="activityDate" class="font-semibold"></span></p>
+            </div>
+
+            <!-- Today's Activity Section -->
+            <div id="activityContainer" class="bg-white bg-opacity-10 rounded-2xl p-6 backdrop-blur-lg shadow-lg mb-8">
+                <h3 class="text-2xl font-semibold text-yellow-300 mb-4">Today's Activity</h3>
+                <div id="quizActivity" class="hidden activity-section">
+                    <h4 class="text-xl mb-4">Interactive Quiz</h4>
+                    <div class="space-y-4">
+                        <p>Complete today's quiz on Grammar and Vocabulary.</p>
+                        <button onclick="startQuiz()" class="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-4 rounded">
+                            Start Quiz
+                        </button>
+                    </div>
+                </div>
+
+                <div id="videoActivity" class="hidden activity-section">
+                    <h4 class="text-xl mb-4">Educational Videos</h4>
+                    <div class="space-y-4">
+                        <p>Watch and analyze these videos on Pronunciation and Speaking Skills.</p>
+                        <div class="aspect-w-16 aspect-h-9">
+                            <iframe class="rounded-lg" src="https://www.youtube.com/embed/placeholder" frameborder="0" allowfullscreen></iframe>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="interactiveActivity" class="hidden activity-section">
+                    <h4 class="text-xl mb-4">Interactive Session</h4>
+                    <div class="space-y-4">
+                        <p>Today's topic: Creative Writing Workshop</p>
+                        <div class="bg-gray-800 p-4 rounded-lg">
+                            <p class="mb-2">Session Guidelines:</p>
+                            <ul class="list-disc list-inside space-y-2">
+                                <li>Story writing exercise</li>
+                                <li>Poetry composition</li>
+                                <li>Group discussion on literature</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="pdfActivity" class="hidden activity-section">
+                    <h4 class="text-xl mb-4">Reading Material</h4>
+                    <div class="space-y-4">
+                        <p>Read through today's material on Literature and Comprehension.</p>
+                        <button onclick="openPDF()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">
+                            Open PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Completion Section -->
+            <div class="bg-white bg-opacity-10 rounded-2xl p-6 backdrop-blur-lg shadow-lg">
+                <h3 class="text-2xl font-semibold text-yellow-300 mb-4">Mark Attendance</h3>
+                <div class="space-y-4">
+                    <p>Upload photos of today's activity to mark your attendance:</p>
+                    <div class="flex items-center space-x-4">
+                        <label class="flex items-center justify-center w-full h-32 px-4 transition bg-gray-800 border-2 border-gray-300 border-dashed rounded-md appearance-none cursor-pointer hover:border-yellow-400 focus:outline-none">
+                            <div class="flex flex-col items-center space-y-2">
+                                <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/>
+                                </svg>
+                                <span class="text-gray-400">Upload Activity Photos</span>
+                            </div>
+                            <input type="file" class="hidden" multiple accept="image/*" onchange="handleFileUpload(event)" id="activityPhotos">
+                        </label>
+                    </div>
+                    <div id="statusMessage" class="text-green-400 hidden"></div>
+                    <button onclick="submitAttendance()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded disabled:opacity-50" disabled id="submitBtn">
+                        Submit & Mark Attendance
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Get day of week and display random activity
+        const activities = ['quiz', 'video', 'interactive', 'pdf'];
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        let currentActivity = '';
+        
+        function getRandomActivity() {
+            const date = new Date();
+            const day = date.getDay();
+            if (day === 0) return null; // Sunday - no activity
+            
+            // Use the day number as seed for random activity
+            const activityIndex = Math.floor((date.getTime() / (1000 * 60 * 60 * 24) + day) % activities.length);
+            return activities[activityIndex];
+        }
+
+        function showTodayActivity() {
+            const date = new Date();
+            const day = date.getDay();
+            
+            if (day === 0) {
+                document.getElementById('activityContainer').innerHTML = '<p class="text-xl">No activities scheduled for Sunday</p>';
+                return;
+            }
+
+            document.getElementById('activityDate').textContent = days[day];
+            const activity = getRandomActivity();
+            currentActivity = activity; // Store current activity
+            
+            // Hide all activities
+            document.querySelectorAll('.activity-section').forEach(section => {
+                section.classList.add('hidden');
+            });
+
+            // Show selected activity
+            document.getElementById(`${activity}Activity`).classList.remove('hidden');
+            
+            // Check if attendance is already marked
+            checkAttendanceStatus();
+        }
+
+        function handleFileUpload(event) {
+            const files = event.target.files;
+            if (files.length > 0) {
+                document.getElementById('submitBtn').disabled = false;
+            }
+        }
+
+        function submitAttendance() {
+            const formData = new FormData();
+            const fileInput = document.getElementById('activityPhotos');
+            const files = fileInput.files;
+            
+            if (files.length === 0) {
+                alert('Please select at least one photo of the activity');
+                return;
+            }
+            
+            // Add all files to form data
+            for (let i = 0; i < files.length; i++) {
+                formData.append('activity_photos', files[i]);
+            }
+            
+            // Add subject and activity type
+            formData.append('subject', 'english');
+            formData.append('activity_type', currentActivity);
+            
+            // Disable button during submission
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Uploading...';
+            
+            // Send to server
+            fetch('/mark_attendance', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Server response:', data);
+                if (data.status === 'success') {
+                    // Show success message
+                    const statusMsg = document.getElementById('statusMessage');
+                    statusMsg.textContent = 'Attendance marked successfully!';
+                    statusMsg.classList.remove('hidden');
+                    statusMsg.classList.add('text-green-400');
+                    
+                    // Update button
+                    submitBtn.textContent = 'Attendance Marked';
+                    submitBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+                    submitBtn.classList.add('bg-gray-500');
+                } else {
+                    // Show error
+                    const statusMsg = document.getElementById('statusMessage');
+                    statusMsg.textContent = 'Error: ' + data.message;
+                    statusMsg.classList.remove('hidden');
+                    statusMsg.classList.add('text-red-400');
+                    
+                    // Reset button
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit & Mark Attendance';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error uploading photos: ' + error);
+                // Reset button
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit & Mark Attendance';
+            });
+        }
+        
+        function checkAttendanceStatus() {
+            fetch('/get_attendance_status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success' && data.data.is_present) {
+                        // Attendance already marked
+                        const statusMsg = document.getElementById('statusMessage');
+                        statusMsg.textContent = `Attendance already marked at ${data.data.attendance_time}`;
+                        statusMsg.classList.remove('hidden');
+                        
+                        // Update button
+                        const submitBtn = document.getElementById('submitBtn');
+                        submitBtn.textContent = 'Attendance Marked';
+                        submitBtn.disabled = true;
+                        submitBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+                        submitBtn.classList.add('bg-gray-500');
+                    }
+                })
+                .catch(error => console.error('Error checking attendance:', error));
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', showTodayActivity);
+    </script>
+</body>
+</html> 
