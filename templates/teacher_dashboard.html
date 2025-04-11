@@ -11,6 +11,9 @@
   <!-- Animate.css -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
 
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+
   <!-- Vanta Background Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r121/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.net.min.js"></script>
@@ -40,6 +43,37 @@
       opacity: 1;
       visibility: visible;
       transition-delay: 0.4s;
+    }
+
+    /* Progress circle */
+    .circle-progress-container {
+      position: relative;
+      width: 150px;
+      height: 150px;
+    }
+    
+    .circle-progress {
+      transform: rotate(-90deg);
+      transform-origin: center;
+    }
+    
+    .progress-text {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    /* Activity cards */
+    .activity-card {
+      transition: all 0.3s ease;
+    }
+    
+    .activity-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
     }
   </style>
 </head>
@@ -126,12 +160,25 @@
     <div class="max-w-6xl mx-auto">
       <!-- Profile Header -->
       <div class="bg-white bg-opacity-10 rounded-2xl p-6 mb-10 backdrop-blur-lg shadow-lg animate__animated animate__fadeInDown">
-        <h2 class="text-3xl font-bold text-yellow-300">Welcome, Mr. Ramesh</h2>
-        <p class="mt-2 text-white">School: Govt High School, Bidar | Subject: Science | Teacher ID: TCH123</p>
+        <h2 class="text-3xl font-bold text-yellow-300">Welcome, {{ session.name }}</h2>
+        <p class="mt-2 text-white">School: {{ session.school }} | 
+          Class: {{ session.class.replace('class', 'Class ') if session.class else 'Not assigned' }} | 
+          Subject: {{ session.subject.replace('_', ' ').title() if session.subject else 'Not assigned' }} | 
+          Teacher ID: {{ session.teacher_id }}</p>
       </div>
 
+      <!-- Error Message (if any) -->
+      {% if error_message %}
+      <div class="bg-red-500 bg-opacity-20 border border-red-500 p-4 rounded-lg mb-10 text-center animate__animated animate__fadeIn">
+        <div class="flex items-center justify-center">
+          <i class="fas fa-exclamation-triangle text-red-500 text-2xl mr-3"></i>
+          <p class="text-white">{{ error_message }}</p>
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Info Cards -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 animate__animated animate__fadeInUp">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 animate__animated animate__fadeInUp mb-10">
         <!-- Attendance -->
         <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md hover:scale-105 transition">
           <h3 class="text-xl font-semibold text-yellow-300 mb-2">My Attendance</h3>
@@ -141,9 +188,25 @@
 
         <!-- Syllabus Progress -->
         <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md hover:scale-105 transition">
-          <h3 class="text-xl font-semibold text-yellow-300 mb-2">Syllabus Covered</h3>
-          <p class="text-white text-3xl font-bold">78%</p>
-          <p class="text-gray-300 mt-1">Class 9 - Science</p>
+          <h3 class="text-xl font-semibold text-yellow-300 mb-2">Course Progress</h3>
+          <div class="flex items-center">
+            <div class="circle-progress-container mx-auto">
+              <svg class="circle-progress" width="150" height="150" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#4B5563" stroke-width="12" />
+                <circle cx="60" cy="60" r="50" fill="none" stroke="#fbbf24" stroke-width="12" 
+                  stroke-dasharray="314" 
+                  stroke-dashoffset="{{ 314 - (314 * (progress.progress_percentage if progress else 0) / 100) }}" />
+              </svg>
+              <div class="progress-text text-white"><span id="progress-percentage">{{ progress.progress_percentage if progress else 0 }}</span>%</div>
+            </div>
+          </div>
+          <p class="text-gray-300 mt-1 text-center">
+            {% if progress %}
+              {{ progress.completed_activities }} of {{ progress.total_activities }} activities completed
+            {% else %}
+              No activities completed yet
+            {% endif %}
+          </p>
         </div>
 
         <!-- Student Feedback -->
@@ -153,6 +216,214 @@
           <p class="text-gray-300 mt-1">Average Rating</p>
         </div>
       </div>
+
+      <!-- Today's Activity Section -->
+      {% if daily_activity and daily_activity.completed %}
+      <div id="today-activity" class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md mb-10 animate__animated animate__fadeInDown">
+        <h3 class="text-2xl font-bold text-yellow-300 mb-4">Today's Activity</h3>
+        <div class="flex items-center justify-center p-8">
+          <div class="text-center">
+            <div class="w-16 h-16 rounded-full bg-green-500 bg-opacity-20 flex items-center justify-center mx-auto mb-4">
+              <i class="fas fa-check-circle text-green-500 text-2xl"></i>
+            </div>
+            <h4 class="text-xl font-semibold text-white">Great job!</h4>
+            <p class="text-gray-300 mt-2">You've already completed today's activity.</p>
+            <p class="text-gray-400 text-sm mt-4">Come back tomorrow for a new activity.</p>
+          </div>
+        </div>
+      </div>
+      {% elif daily_activity and daily_activity.activity %}
+      <div id="today-activity" class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md mb-10 animate__animated animate__fadeInDown">
+        <h3 class="text-2xl font-bold text-yellow-300 mb-4">Today's Activity</h3>
+        <div class="bg-gray-800 rounded-xl p-5 border border-yellow-500/20">
+          <div class="flex flex-col md:flex-row items-center md:items-start gap-4">
+            <div class="w-16 h-16 rounded-full flex items-center justify-center bg-{{ activity_types[daily_activity.activity.activity_type].color }} bg-opacity-20 flex-shrink-0">
+              <i class="{{ activity_types[daily_activity.activity.activity_type].icon }} text-{{ activity_types[daily_activity.activity.activity_type].color }} text-2xl"></i>
+            </div>
+            <div class="flex-grow">
+              <h4 class="text-xl font-semibold text-white">{{ daily_activity.activity.activity_title }}</h4>
+              <p class="text-gray-300 mt-1">
+                Module: {{ daily_activity.activity.module_title }} | 
+                Activity Type: {{ daily_activity.activity.activity_type.title() }}
+              </p>
+              <div class="mt-4">
+                <form id="complete-activity-form">
+                  <input type="hidden" name="activity_id" value="{{ daily_activity.activity.activity_id }}">
+                  <input type="hidden" name="activity_type" value="{{ daily_activity.activity.activity_type }}">
+                  <input type="hidden" name="activity_title" value="{{ daily_activity.activity.activity_title }}">
+                  <input type="hidden" name="class_level" value="{{ current_class }}">
+                  <button type="submit" 
+                    class="px-5 py-2 bg-gradient-to-r from-yellow-500 to-yellow-600 text-black font-semibold rounded-lg shadow hover:from-yellow-400 hover:to-yellow-500 transition-all duration-300 active:scale-95">
+                    Mark as Completed & Record Attendance
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div id="today-activity" class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md mb-10 animate__animated animate__fadeInDown">
+        <h3 class="text-2xl font-bold text-yellow-300 mb-4">Today's Activity</h3>
+        {% if daily_activity %}
+          <p class="text-white">{{ daily_activity.message }}</p>
+          <p class="text-gray-300 mt-2">{{ "Congratulations! You've completed all activities for this course." if daily_activity.message == "All activities completed" else "" }}</p>
+        {% else %}
+          <p class="text-white">No activities available for today</p>
+          <p class="text-gray-300 mt-2">Please try selecting a different class or check back later.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <!-- Weekly Schedule -->
+      {% if weekly_schedule %}
+      <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md animate__animated animate__fadeInUp">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-6">
+          <h3 class="text-2xl font-bold text-yellow-300">This Week's Activities Schedule</h3>
+          
+          <!-- Class Navigation Buttons -->
+          <div class="flex space-x-2 mt-4 md:mt-0">
+            <a href="{{ url_for('teacher_dashboard', class_level='class8') }}" 
+              class="px-3 py-1.5 rounded-lg font-medium text-sm transition-all
+              {% if current_class == 'class8' %}
+                bg-blue-600 text-white
+              {% else %}
+                bg-gray-700 text-gray-300 hover:bg-gray-600
+              {% endif %}">
+              Class 8
+            </a>
+            <a href="{{ url_for('teacher_dashboard', class_level='class9') }}" 
+              class="px-3 py-1.5 rounded-lg font-medium text-sm transition-all
+              {% if current_class == 'class9' %}
+                bg-blue-600 text-white
+              {% else %}
+                bg-gray-700 text-gray-300 hover:bg-gray-600
+              {% endif %}">
+              Class 9
+            </a>
+            <a href="{{ url_for('teacher_dashboard', class_level='class10') }}" 
+              class="px-3 py-1.5 rounded-lg font-medium text-sm transition-all
+              {% if current_class == 'class10' %}
+                bg-blue-600 text-white
+              {% else %}
+                bg-gray-700 text-gray-300 hover:bg-gray-600
+              {% endif %}">
+              Class 10
+            </a>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          {% for day in weekly_schedule %}
+          <div class="bg-gray-800 rounded-xl p-4 {% if day.is_today %}ring-2 ring-yellow-400{% endif %} {% if day.completed %}opacity-75{% endif %}">
+            <!-- Day header -->
+            <div class="flex justify-between items-center mb-3">
+              <h4 class="font-bold text-white">{{ day.day }}</h4>
+              <span class="text-sm text-gray-400">{{ day.date.strftime('%d %b') }}</span>
+            </div>
+            
+            <!-- Activity details -->
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-full flex items-center justify-center bg-{{ activity_types[day.activity.activity_type].color }} bg-opacity-20 flex-shrink-0 mt-1">
+                <i class="{{ activity_types[day.activity.activity_type].icon }} text-{{ activity_types[day.activity.activity_type].color }}"></i>
+              </div>
+              <div>
+                <h5 class="text-md font-medium text-white">{{ day.activity.activity_title }}</h5>
+                <p class="text-xs text-gray-400">{{ day.activity.activity_type.title() }}</p>
+                <p class="text-xs text-gray-400 mt-1">Module: {{ day.activity.module_title }}</p>
+                
+                <!-- Status indicator -->
+                {% if day.completed %}
+                <div class="mt-3 flex items-center text-green-400 text-sm">
+                  <i class="fas fa-check-circle mr-1"></i> Completed
+                </div>
+                {% elif day.is_past %}
+                <div class="mt-3 flex items-center text-red-400 text-sm">
+                  <i class="fas fa-times-circle mr-1"></i> Missed
+                </div>
+                {% elif day.is_today %}
+                <div class="mt-3">
+                  <form class="complete-activity-form">
+                    <input type="hidden" name="activity_id" value="{{ day.activity.activity_id }}">
+                    <input type="hidden" name="activity_type" value="{{ day.activity.activity_type }}">
+                    <input type="hidden" name="activity_title" value="{{ day.activity.activity_title }}">
+                    <input type="hidden" name="class_level" value="{{ current_class }}">
+                    <button type="submit" 
+                      class="px-3 py-1 bg-yellow-500 text-black text-sm font-semibold rounded-lg hover:bg-yellow-400 transition-colors">
+                      Complete & Mark Attendance
+                    </button>
+                  </form>
+                </div>
+                {% else %}
+                <div class="mt-3 flex items-center text-blue-400 text-sm">
+                  <i class="fas fa-clock mr-1"></i> Coming Soon
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        
+        <div class="mt-5 text-center">
+          {% if progress %}
+          <p class="text-md text-white">{{ progress.completed_activities }} of {{ progress.total_activities }} activities completed ({{ progress.progress_percentage }}%)</p>
+          <div class="w-full bg-gray-700 rounded-full h-2.5 mt-2 max-w-lg mx-auto">
+            <div class="bg-yellow-500 h-2.5 rounded-full" style="width: {{ progress.progress_percentage }}%"></div>
+          </div>
+          {% else %}
+          <p class="text-md text-white">No progress data available</p>
+          {% endif %}
+          <p class="text-sm text-gray-400 mt-4">Schedule refreshes weekly. Complete each day's activity to mark your attendance.</p>
+        </div>
+      </div>
+      {% else %}
+      <div class="bg-white bg-opacity-10 p-6 rounded-2xl shadow-xl backdrop-blur-md animate__animated animate__fadeInUp">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-6">
+          <h3 class="text-2xl font-bold text-yellow-300">Weekly Schedule</h3>
+          
+          <!-- Class Navigation Buttons -->
+          <div class="flex space-x-2 mt-4 md:mt-0">
+            <a href="{{ url_for('teacher_dashboard', class_level='class8') }}" 
+              class="px-3 py-1.5 rounded-lg font-medium text-sm transition-all
+              {% if current_class == 'class8' %}
+                bg-blue-600 text-white
+              {% else %}
+                bg-gray-700 text-gray-300 hover:bg-gray-600
+              {% endif %}">
+              Class 8
+            </a>
+            <a href="{{ url_for('teacher_dashboard', class_level='class9') }}" 
+              class="px-3 py-1.5 rounded-lg font-medium text-sm transition-all
+              {% if current_class == 'class9' %}
+                bg-blue-600 text-white
+              {% else %}
+                bg-gray-700 text-gray-300 hover:bg-gray-600
+              {% endif %}">
+              Class 9
+            </a>
+            <a href="{{ url_for('teacher_dashboard', class_level='class10') }}" 
+              class="px-3 py-1.5 rounded-lg font-medium text-sm transition-all
+              {% if current_class == 'class10' %}
+                bg-blue-600 text-white
+              {% else %}
+                bg-gray-700 text-gray-300 hover:bg-gray-600
+              {% endif %}">
+              Class 10
+            </a>
+          </div>
+        </div>
+        
+        <div class="text-center p-8">
+          <div class="w-16 h-16 rounded-full bg-blue-500 bg-opacity-20 flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-calendar-alt text-blue-500 text-2xl"></i>
+          </div>
+          <h4 class="text-xl font-semibold text-white">No schedule available</h4>
+          <p class="text-gray-300 mt-2">We couldn't generate a weekly schedule for this class.</p>
+          <p class="text-gray-400 text-sm mt-4">Please try selecting a different class or contact support.</p>
+        </div>
+      </div>
+      {% endif %}
     </div>
   </section>
 
@@ -171,6 +442,67 @@
       points: 12.00,
       maxDistance: 25.00,
       spacing: 15.00
+    });
+
+    // Function to mark an activity as completed
+    document.getElementById('complete-activity-form')?.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(this);
+      
+      fetch('/complete_activity', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'success') {
+          // Update progress percentage
+          document.getElementById('progress-percentage').textContent = data.progress_percentage;
+          
+          // Show success message
+          alert('Activity completed and attendance marked successfully!');
+          
+          // Refresh the page to show updated progress
+          window.location.reload();
+        } else {
+          alert(data.message);
+        }
+      })
+      .catch(error => {
+        console.error('Error completing activity:', error);
+        alert('Failed to complete activity. Please try again.');
+      });
+    });
+
+    // Add event listeners to all weekly schedule activity forms
+    document.querySelectorAll('.complete-activity-form').forEach(form => {
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        fetch('/complete_activity', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'success') {
+            // Show success message
+            alert('Activity completed and attendance marked successfully!');
+            
+            // Refresh the page to show updated progress
+            window.location.reload();
+          } else {
+            alert(data.message);
+          }
+        })
+        .catch(error => {
+          console.error('Error completing activity:', error);
+          alert('Failed to complete activity. Please try again.');
+        });
+      });
     });
   </script>
 

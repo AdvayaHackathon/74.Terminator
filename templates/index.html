@@ -76,6 +76,21 @@
         <h2 class="text-3xl font-bold text-center text-yellow-400">Sign Up for EduPulse</h2>
         <input type="text" name="name" placeholder="Full Name" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
         <input type="email" name="email" placeholder="Email" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
+        <input type="text" name="school" placeholder="School Name" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
+        <input type="text" name="teacher_id" placeholder="Teacher ID" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
+        <select name="class" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
+            <option value="" disabled selected>Select Class</option>
+            <option value="class8">Class 8</option>
+            <option value="class9">Class 9</option>
+            <option value="class10">Class 10</option>
+        </select>
+        <select name="subject" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
+            <option value="" disabled selected>Select Subject</option>
+            <option value="science">Science</option>
+            <option value="social_science">Social Science</option>
+            <option value="english">English</option>
+            <option value="mathematics">Mathematics</option>
+        </select>
         <input type="password" name="password" placeholder="Password" class="w-full px-4 py-3 rounded-xl bg-gray-900 text-white border border-gray-700 focus:outline-none focus:ring-2 focus:ring-yellow-400" required>
         <button type="submit" class="w-full py-3 bg-yellow-400 text-black font-bold rounded-xl hover:scale-105 transition duration-300">Sign Up</button>
     </form>
