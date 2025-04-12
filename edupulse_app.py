@@ -2811,27 +2811,15 @@ def ivr_callback():
         
         # Add a welcome message
         response.say(
-            f"Hello. This is EduPulse calling to get your feedback on {teacher}'s {subject} class.",
-            voice="Polly.Joanna"
-        )
-        
-        response.pause(length=1)
-        
-        # Explain the rating system clearly
-        response.say(
-            "Please rate your experience by pressing a number on your keypad. "
-            "Press 1 for one star, meaning poor performance. "
-            "Press 2 for two stars, meaning below average. "
-            "Press 3 for three stars, meaning average. "
-            "Press 4 for four stars, meaning good. "
-            "Press 5 for five stars, meaning excellent.",
+            f"Hello. This is EduPulse calling to get your feedback on {teacher}'s {subject} class. "
+            f"Please rate your experience from 1 to 5, where 1 is poor and 5 is excellent.",
             voice="Polly.Joanna"
         )
         
         # Gather the student's input
         gather = Gather(num_digits=1, action="/ivr/process", method="POST", timeout=10)
         gather.say(
-            "Please press a number from 1 to 5 now to rate the teacher.",
+            "Press a number between 1 and 5 now.",
             voice="Polly.Joanna"
         )
         response.append(gather)
@@ -2861,45 +2849,24 @@ def ivr_process():
         digit = request.form.get('Digits', '')
         call_sid = request.form.get('CallSid', '')
         
-        # Find the call record to get the feedback_id
-        call_record = calls_collection.find_one({"call_sid": call_sid})
+        # Get call details from database
+        # Normally you'd store call_sid -> feedback_id mapping, but for simplicity
+        # we'll just use a placeholder response
         
         response = VoiceResponse()
         
         # Check if valid rating
         if digit in ['1', '2', '3', '4', '5']:
             # Store the rating in the database
-            rating_messages = {
-                '1': "We're sorry to hear you had a poor experience. Your one-star feedback has been recorded.",
-                '2': "Thank you for your two-star rating. We'll work on improving this teacher's performance.",
-                '3': "Your three-star rating has been recorded. We appreciate your average assessment.",
-                '4': "Thank you for your positive four-star feedback. We're glad you had a good experience.",
-                '5': "Excellent! Your five-star rating has been recorded. Thank you for your outstanding feedback."
-            }
+            # In a production app, you'd look up which feedback request this call belongs to
+            # and update that record
             
-            # Log the rating
+            # For now, we just log it
             logger.info(f"Received rating {digit} for call {call_sid}")
             
-            # If we have a valid call record, update the feedback data
-            if call_record and 'feedback_id' in call_record:
-                feedback_id = call_record['feedback_id']
-                logger.info(f"Updating feedback {feedback_id} with rating {digit}")
-                
-                # Update the ratings count in the feedback document
-                feedback_ratings_collection.update_one(
-                    {"_id": feedback_id},
-                    {"$inc": {f"ratings.{digit}": 1, "calls_completed": 1}}
-                )
-                
-                # Update the call record to mark it as processed
-                calls_collection.update_one(
-                    {"call_sid": call_sid},
-                    {"$set": {"status": "completed", "rating": int(digit), "processed_at": datetime.now()}}
-                )
-            
-            # Thank the user with specific message based on rating
+            # Thank the user
             response.say(
-                f"{rating_messages[digit]} Goodbye!",
+                f"Thank you for your rating of {digit}. Your feedback is important to us. Goodbye!",
                 voice="Polly.Joanna"
             )
         else:
@@ -2970,8 +2937,7 @@ class SimulatedTwilioClient:
         In a real application, this would get the actual digits pressed
         """
         # Simulate a student pressing 1-5 on their phone
-        # Weight toward higher ratings for more positive results in simulation
-        response = random.choices([1, 2, 3, 4, 5], weights=[1, 2, 4, 6, 7])[0]
+        response = random.choices([1, 2, 3, 4, 5], weights=[1, 2, 3, 4, 5])[0]
         logger.info(f"SIMULATED: Student pressed {response} for call {call_sid}")
         return str(response)
 
