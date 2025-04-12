@@ -25,28 +25,20 @@ app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Needed for flash messages
 
 # Twilio configuration
-app.config['TWILIO_ACCOUNT_SID'] = 'AC470f84ce0e1de280d9fc2ca823706ebe'  # Your Twilio Account SID
-app.config['TWILIO_AUTH_TOKEN'] = 'af0ac93a4073efed905879f891b94c55'    # Your Twilio Auth Token
-app.config['TWILIO_PHONE_NUMBER'] = '+15055392013' # Your Twilio Phone Number with country code
-app.config['TWILIO_CALLBACK_URL'] = 'https://your-app-url.com/ivr/callback'  # You'll need to update this with ngrok URL
-app.config['TEST_PHONE_NUMBERS'] = '+918050117904,+919035541365'  # Test phone numbers with country code
+app.config['TWILIO_ACCOUNT_SID'] = os.environ.get('AC470f84ce0e1de280d9fc2ca823706ebe', '')  # Add your Twilio Account SID here if not using env vars
+app.config['TWILIO_AUTH_TOKEN'] = os.environ.get('af0ac93a4073efed905879f891b94c55', '')    # Add your Twilio Auth Token here if not using env vars
+app.config['TWILIO_PHONE_NUMBER'] = os.environ.get('+15055392013', '') # Add your Twilio Phone Number here if not using env vars
+app.config['TWILIO_CALLBACK_URL'] = os.environ.get('TWILIO_CALLBACK_URL', 'https://your-app-url.com/ivr/callback')
+app.config['TEST_PHONE_NUMBERS'] = os.environ.get('8050117904,9035541365', '')  # Comma-separated list of test phone numbers
 
 bcrypt = Bcrypt(app)
 
 # Configure upload folder before any routes are defined
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-app.config['PDF_FOLDER'] = os.path.join(app.config['UPLOAD_FOLDER'], 'pdf_activities')
-app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB max upload size
-
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
     logger.info(f"Created upload folder: {app.config['UPLOAD_FOLDER']}")
 
-if not os.path.exists(app.config['PDF_FOLDER']):
-    os.makedirs(app.config['PDF_FOLDER'])
-    logger.info(f"Created PDF uploads folder: {app.config['PDF_FOLDER']}")
-    
 # MongoDB Connection - Using local MongoDB for reliable development
 try:
     # Using local MongoDB connection which is more reliable for development
@@ -2982,103 +2974,6 @@ class SimulatedTwilioClient:
         response = random.choices([1, 2, 3, 4, 5], weights=[1, 2, 4, 6, 7])[0]
         logger.info(f"SIMULATED: Student pressed {response} for call {call_sid}")
         return str(response)
-
-# Function to check if file has allowed extension
-def allowed_file(filename):
-    """Check if uploaded file has an allowed extension"""
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
-
-@app.route('/upload_pdf', methods=['POST'])
-def upload_pdf():
-    """
-    Handle PDF file uploads for PDF reading activities.
-    The uploaded PDFs are stored in a dedicated folder and associated with the activity.
-    """
-    if 'email' not in session or session.get('role') != 'teacher':
-        return jsonify({"status": "fail", "message": "You must be logged in as a teacher"})
-        
-    try:
-        # Check if the post request has the file part
-        if 'pdf_file' not in request.files:
-            return jsonify({"status": "fail", "message": "No file part in the request"})
-            
-        file = request.files['pdf_file']
-        
-        # If user does not select file, browser might submit an empty file
-        if file.filename == '':
-            return jsonify({"status": "fail", "message": "No file selected"})
-            
-        activity_id = request.form.get('activity_id')
-        activity_type = request.form.get('activity_type')
-        activity_title = request.form.get('activity_title')
-        class_level = request.form.get('class_level')
-        teacher_email = session.get('email')
-        
-        # Validate that we have all required data
-        if not all([activity_id, activity_type, activity_title, class_level, teacher_email]):
-            return jsonify({"status": "fail", "message": "Missing required activity information"})
-            
-        # Verify that the activity actually exists and is a PDF activity
-        if activity_type != 'pdf':
-            return jsonify({"status": "fail", "message": "This activity is not a PDF reading activity"})
-            
-        # Check if file is allowed
-        if file and allowed_file(file.filename):
-            # Create a secure filename
-            filename = secure_filename(file.filename)
-            
-            # Add timestamp and activity ID to ensure uniqueness
-            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-            unique_filename = f"{timestamp}_{activity_id}_{filename}"
-            
-            # Create a folder structure based on teacher email and class
-            teacher_folder = os.path.join(app.config['PDF_FOLDER'], teacher_email.replace('@', '_at_'))
-            class_folder = os.path.join(teacher_folder, class_level)
-            
-            # Ensure folders exist
-            if not os.path.exists(teacher_folder):
-                os.makedirs(teacher_folder)
-                
-            if not os.path.exists(class_folder):
-                os.makedirs(class_folder)
-                
-            # Save the file
-            file_path = os.path.join(class_folder, unique_filename)
-            file.save(file_path)
-            
-            logger.info(f"PDF uploaded: {file_path} for activity {activity_id}")
-            
-            # Store the upload record in the database
-            upload_record = {
-                "teacher_email": teacher_email,
-                "class_level": class_level,
-                "activity_id": activity_id,
-                "activity_title": activity_title,
-                "filename": unique_filename,
-                "original_filename": filename,
-                "file_path": file_path,
-                "upload_date": datetime.now(),
-                "file_size_kb": os.path.getsize(file_path) // 1024  # Size in KB
-            }
-            
-            # Store in the database
-            result = db.pdf_uploads.insert_one(upload_record)
-            
-            if result.inserted_id:
-                return jsonify({
-                    "status": "success",
-                    "message": "PDF uploaded successfully",
-                    "file_id": str(result.inserted_id)
-                })
-            else:
-                return jsonify({"status": "fail", "message": "Failed to record the upload in the database"})
-        else:
-            return jsonify({"status": "fail", "message": "File not allowed. Please upload a PDF file."})
-            
-    except Exception as e:
-        logger.error(f"Error uploading PDF: {e}")
-        logger.error(traceback.format_exc())
-        return jsonify({"status": "fail", "message": f"An error occurred: {str(e)}"})
 
 if __name__ == '__main__':
     # Create test user for easy login
