@@ -253,6 +253,60 @@
                 Module: {{ daily_activity.activity.module_title }} | 
                 Activity Type: {{ daily_activity.activity.activity_type.title() }}
               </p>
+              
+              <!-- PDF Upload Option for PDF Activities -->
+              {% if daily_activity.activity.activity_type == 'pdf' %}
+              <div class="mt-4 bg-gray-700 bg-opacity-40 p-4 rounded-lg border border-gray-600">
+                <h5 class="text-yellow-300 text-md font-medium mb-2">
+                  <i class="fas fa-file-pdf mr-1"></i> Upload PDF for this activity
+                </h5>
+                <p class="text-gray-300 text-sm mb-3">Please upload the PDF file for today's reading activity.</p>
+                
+                <form id="pdf-upload-form" action="/upload_pdf" method="POST" enctype="multipart/form-data" class="space-y-3">
+                  <input type="hidden" name="activity_id" value="{{ daily_activity.activity.activity_id }}">
+                  <input type="hidden" name="activity_type" value="{{ daily_activity.activity.activity_type }}">
+                  <input type="hidden" name="activity_title" value="{{ daily_activity.activity.activity_title }}">
+                  <input type="hidden" name="class_level" value="{{ current_class }}">
+                  
+                  <div class="flex items-center justify-center w-full">
+                    <label for="pdf-file" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-500 border-dashed rounded-lg cursor-pointer bg-gray-800 hover:bg-gray-700">
+                      <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                        <i class="fas fa-cloud-upload-alt text-gray-400 text-2xl mb-2"></i>
+                        <p class="mb-2 text-sm text-gray-400"><span class="font-semibold">Click to upload</span> or drag and drop</p>
+                        <p class="text-xs text-gray-500">PDF files only (MAX 10MB)</p>
+                      </div>
+                      <input id="pdf-file" name="pdf_file" type="file" accept=".pdf" class="hidden" required />
+                    </label>
+                  </div>
+                  
+                  <div id="file-name-display" class="text-sm text-gray-300 hidden">
+                    Selected file: <span id="selected-file-name" class="font-medium"></span>
+                  </div>
+                  
+                  <div class="flex items-center gap-3">
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors">
+                      Upload PDF
+                    </button>
+                    <span class="text-xs text-gray-400">After uploading, you can mark the activity as completed</span>
+                  </div>
+                </form>
+                
+                <div id="upload-success" class="hidden mt-3 bg-green-500 bg-opacity-20 border border-green-500 p-2 rounded-lg">
+                  <div class="flex items-center text-green-400 text-sm">
+                    <i class="fas fa-check-circle mr-2"></i>
+                    <span>PDF uploaded successfully!</span>
+                  </div>
+                </div>
+                
+                <div id="upload-error" class="hidden mt-3 bg-red-500 bg-opacity-20 border border-red-500 p-2 rounded-lg">
+                  <div class="flex items-center text-red-400 text-sm">
+                    <i class="fas fa-exclamation-circle mr-2"></i>
+                    <span id="error-message">Error uploading PDF.</span>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
+              
               <div class="mt-4">
                 <form id="complete-activity-form">
                   <input type="hidden" name="activity_id" value="{{ daily_activity.activity.activity_id }}">
@@ -510,6 +564,72 @@
         e.preventDefault();
       }
     });
+
+    // Show file name when a file is selected
+    const pdfFileInput = document.getElementById('pdf-file');
+    if (pdfFileInput) {
+      pdfFileInput.addEventListener('change', function() {
+        const fileNameDisplay = document.getElementById('file-name-display');
+        const selectedFileName = document.getElementById('selected-file-name');
+        
+        if (this.files.length > 0) {
+          selectedFileName.textContent = this.files[0].name;
+          fileNameDisplay.classList.remove('hidden');
+        } else {
+          fileNameDisplay.classList.add('hidden');
+        }
+      });
+    }
+
+    // Handle PDF upload form submission
+    const pdfUploadForm = document.getElementById('pdf-upload-form');
+    if (pdfUploadForm) {
+      pdfUploadForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        // Show loading state
+        const submitButton = this.querySelector('button[type="submit"]');
+        const originalButtonText = submitButton.innerHTML;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Uploading...';
+        submitButton.disabled = true;
+        
+        // Hide any previous messages
+        document.getElementById('upload-success').classList.add('hidden');
+        document.getElementById('upload-error').classList.add('hidden');
+        
+        fetch('/upload_pdf', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          submitButton.innerHTML = originalButtonText;
+          submitButton.disabled = false;
+          
+          if (data.status === 'success') {
+            document.getElementById('upload-success').classList.remove('hidden');
+            // Reset form and file name display
+            pdfUploadForm.reset();
+            document.getElementById('file-name-display').classList.add('hidden');
+          } else {
+            const errorMessage = document.getElementById('error-message');
+            errorMessage.textContent = data.message || 'Error uploading PDF.';
+            document.getElementById('upload-error').classList.remove('hidden');
+          }
+        })
+        .catch(error => {
+          console.error('Error uploading PDF:', error);
+          submitButton.innerHTML = originalButtonText;
+          submitButton.disabled = false;
+          
+          const errorMessage = document.getElementById('error-message');
+          errorMessage.textContent = 'Network error. Please try again.';
+          document.getElementById('upload-error').classList.remove('hidden');
+        });
+      });
+    }
 
     // Function to mark an activity as completed
     document.getElementById('complete-activity-form')?.addEventListener('submit', function(e) {

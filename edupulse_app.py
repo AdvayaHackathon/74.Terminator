@@ -12,6 +12,7 @@ import calendar
 import random
 import string
 import uuid
+from twilio.rest import Client
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -19,16 +20,33 @@ logging.basicConfig(level=logging.INFO,
                     handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
+# App configuration
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Needed for flash messages
+
+# Twilio configuration
+app.config['TWILIO_ACCOUNT_SID'] = 'AC470f84ce0e1de280d9fc2ca823706ebe'  # Your Twilio Account SID
+app.config['TWILIO_AUTH_TOKEN'] = 'af0ac93a4073efed905879f891b94c55'    # Your Twilio Auth Token
+app.config['TWILIO_PHONE_NUMBER'] = '+15055392013' # Your Twilio Phone Number with country code
+app.config['TWILIO_CALLBACK_URL'] = 'https://your-app-url.com/ivr/callback'  # You'll need to update this with ngrok URL
+app.config['TEST_PHONE_NUMBERS'] = '+918050117904,+919035541365'  # Test phone numbers with country code
+
 bcrypt = Bcrypt(app)
 
 # Configure upload folder before any routes are defined
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+app.config['PDF_FOLDER'] = os.path.join(app.config['UPLOAD_FOLDER'], 'pdf_activities')
+app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB max upload size
+
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
     logger.info(f"Created upload folder: {app.config['UPLOAD_FOLDER']}")
 
+if not os.path.exists(app.config['PDF_FOLDER']):
+    os.makedirs(app.config['PDF_FOLDER'])
+    logger.info(f"Created PDF uploads folder: {app.config['PDF_FOLDER']}")
+    
 # MongoDB Connection - Using local MongoDB for reliable development
 try:
     # Using local MongoDB connection which is more reliable for development
@@ -53,6 +71,8 @@ subject_activity_stats = db["subject_activity_stats"]
 curriculum_collection = db["curriculum"]
 course_progress_collection = db["course_progress"]
 feedback_ratings_collection = db["feedback_ratings"]
+calls_collection = db["call_records"]
+warnings_collection = db["warnings"]
 
 # Activity types with associated icons and colors
 ACTIVITY_TYPES = {
@@ -73,70 +93,79 @@ def verify_db_connection():
         logger.error(f"Database connection error: {e}")
         return False
 
-# Simulated Twilio IVR Call Client
-class SimulatedTwilioClient:
+# Real Twilio IVR Call Client
+class TwilioClient:
     """
-    A simulated Twilio client for demo purposes.
-    In a real application, you would use the actual Twilio client with your Twilio credentials.
+    A real Twilio client for production use.
     """
     def __init__(self):
-        # These would be real Twilio credentials in production
-        self.account_sid = "TWILIO_ACCOUNT_SID_PLACEHOLDER"
-        self.auth_token = "TWILIO_AUTH_TOKEN_PLACEHOLDER"
-        self.from_number = "+15555555555"  # Your Twilio phone number
-        logger.info("Initialized simulated Twilio client")
+        self.account_sid = app.config['TWILIO_ACCOUNT_SID']
+        self.auth_token = app.config['TWILIO_AUTH_TOKEN']
+        self.from_number = app.config['TWILIO_PHONE_NUMBER']
+        self.callback_url = app.config['TWILIO_CALLBACK_URL']
         
-    def make_ivr_call(self, to_number, teacher_name, class_name, subject, callback_url):
+        if not self.account_sid or not self.auth_token or not self.from_number:
+            logger.error("Twilio credentials are not properly configured")
+            raise ValueError("Twilio credentials missing")
+            
+        self.client = Client(self.account_sid, self.auth_token)
+        logger.info("Initialized Twilio client")
+        
+    def make_ivr_call(self, to_number, teacher_name, class_name, subject, callback_url=None):
         """
-        Simulate making an IVR call to a student
-        In a real application, this would make an actual Twilio call
+        Make a real IVR call to a student using Twilio
         """
         try:
-            logger.info(f"SIMULATED: Making IVR call to {to_number} for feedback on {teacher_name}'s {subject} class")
+            logger.info(f"Making IVR call to {to_number} for feedback on {teacher_name}'s {subject} class")
             
-            # This would be the actual Twilio API call in production
-            # client.calls.create(
-            #     to=to_number,
-            #     from_=self.from_number,
-            #     url=callback_url,
-            #     method="POST",
-            #     status_callback=status_callback_url,
-            #     status_callback_method="POST"
-            # )
+            # Use provided callback URL or default
+            if not callback_url:
+                callback_url = self.callback_url
+                
+            # Append query parameters to callback URL to identify the context
+            full_callback_url = f"{callback_url}?teacher={teacher_name}&class={class_name}&subject={subject}"
             
-            # For simulation, we'll just return success
+            # Make the actual Twilio API call
+            call = self.client.calls.create(
+                to=to_number,
+                from_=self.from_number,
+                url=full_callback_url,
+                method="POST"
+            )
+            
+            logger.info(f"Initiated call with SID: {call.sid}")
+            
+            # Return call details
             return {
-                "status": "queued",
-                "sid": f"CA{generate_random_id(32)}",
-                "to": to_number,
-                "from": self.from_number,
-                "direction": "outbound-api",
-                "date_created": datetime.now().isoformat()
+                "status": call.status,
+                "sid": call.sid,
+                "to": call.to,
+                "from": call.from_,
+                "direction": call.direction,
+                "date_created": call.date_created.isoformat()
             }
         except Exception as e:
-            logger.error(f"Error in simulated IVR call: {e}")
+            logger.error(f"Error in Twilio call: {e}")
             return None
             
     def get_call_status(self, call_sid):
         """
-        Simulate getting call status
-        In a real application, this would check the actual call status
+        Get the status of a Twilio call
         """
-        # Simulated statuses: queued, ringing, in-progress, completed, busy, failed, no-answer
-        statuses = ["queued", "ringing", "in-progress", "completed", "busy", "failed", "no-answer"]
-        # Weight toward completed for demo purposes
-        weights = [1, 1, 1, 5, 0.5, 0.5, 1]
-        return random.choices(statuses, weights=weights)[0]
+        try:
+            call = self.client.calls(call_sid).fetch()
+            return call.status
+        except Exception as e:
+            logger.error(f"Error getting call status for {call_sid}: {e}")
+            return "unknown"
         
     def get_ivr_response(self, call_sid):
         """
-        Simulate getting IVR input response
-        In a real application, this would get the actual digits pressed
+        This would typically be handled via webhook when Twilio receives user input
+        For this implementation, we're just providing a placeholder
         """
-        # Simulate a student pressing 1-5 on their phone
-        response = random.choices([1, 2, 3, 4, 5], weights=[1, 2, 3, 4, 5])[0]
-        logger.info(f"SIMULATED: Student pressed {response} for call {call_sid}")
-        return str(response)
+        logger.warning(f"get_ivr_response called directly for {call_sid} - this should be handled via webhooks")
+        return None
 
 # Helper function to generate random ID (for simulating Twilio call SIDs)
 def generate_random_id(length):
@@ -158,8 +187,8 @@ def schedule_weekly_feedback_calls():
             logger.error("Database connection failed - cannot schedule feedback calls")
             return False
         
-        # Initialize our simulated Twilio client
-        twilio = SimulatedTwilioClient()
+        # Initialize our Twilio client
+        twilio = TwilioClient()
         
         # Find all teachers
         teachers = list(users_collection.find({"role": "teacher"}))
@@ -241,10 +270,15 @@ def schedule_weekly_feedback_calls():
         logger.error(f"Error scheduling weekly feedback: {e}")
         return False
 
-def simulate_student_feedback(feedback_id):
+def simulate_student_feedback(feedback_id, student_count=None):
     """
-    Simulate student feedback for demo purposes.
-    In a real app, this would be replaced with actual IVR call logic using a service like Twilio.
+    Collect student feedback via Twilio IVR calls.
+    In simulation mode, this will generate random feedback.
+    In production mode, this will initiate actual calls through Twilio.
+    
+    Args:
+        feedback_id (str): The ID of the feedback request
+        student_count (int, optional): The number of students to call. If None, a random number is chosen.
     """
     try:
         # Get the feedback request
@@ -253,17 +287,31 @@ def simulate_student_feedback(feedback_id):
             logger.error(f"Feedback request {feedback_id} not found")
             return False
         
-        # Initialize the simulated Twilio client    
-        twilio = SimulatedTwilioClient()
-        logger.info(f"Starting IVR call simulation for {feedback.get('teacher_name', 'Unknown Teacher')}")
+        # Determine if we're in production or simulation mode
+        is_simulation = not all([
+            app.config.get('TWILIO_ACCOUNT_SID'),
+            app.config.get('TWILIO_AUTH_TOKEN'),
+            app.config.get('TWILIO_PHONE_NUMBER')
+        ])
+        
+        # Initialize the appropriate client
+        if is_simulation:
+            # Use the simulated client for testing
+            twilio = SimulatedTwilioClient()
+            logger.info(f"Starting IVR call SIMULATION for {feedback.get('teacher_name', 'Unknown Teacher')}")
+        else:
+            # Use real Twilio client for production
+            twilio = TwilioClient()
+            logger.info(f"Starting REAL IVR calls for {feedback.get('teacher_name', 'Unknown Teacher')}")
             
         # In a real application, we would get a list of student phone numbers from a database
-        # For simulation, we'll generate random phone numbers
-        import random
-        student_count = random.randint(20, 30)
-        logger.info(f"Simulating {student_count} student calls for {feedback.get('teacher_email', 'unknown')}")
+        # For simulation or demo, we'll generate random phone numbers if no real data
+        if student_count is None:
+            student_count = random.randint(20, 30)
         
-        # For each student, simulate a rating (1-5)
+        logger.info(f"Initiating {student_count} calls for {feedback.get('teacher_email', 'unknown')}")
+        
+        # For each student, track ratings (1-5)
         ratings = {
             "1": 0,
             "2": 0,
@@ -272,19 +320,34 @@ def simulate_student_feedback(feedback_id):
             "5": 0
         }
         
+        # In production, we would retrieve actual student phone numbers
+        # For demo purposes, if you have a test phone number, you can use it
+        test_phone_numbers = []
+        if not is_simulation and 'TEST_PHONE_NUMBERS' in app.config:
+            try:
+                test_phone_numbers = app.config['TEST_PHONE_NUMBERS'].split(',')
+                logger.info(f"Using {len(test_phone_numbers)} test phone numbers from configuration")
+            except:
+                logger.warning("Failed to parse TEST_PHONE_NUMBERS config, falling back to simulation")
+        
         call_records = []
         completed_calls = 0
         
-        # Simulate the IVR call process
+        # Begin the call process
         for i in range(student_count):
-            # Generate a random phone number (for simulation only)
-            student_phone = f"+1555{random.randint(1000000, 9999999)}"
-            
-            # In a real application, this would be your server's callback URL for the IVR script
-            callback_url = "https://example.com/ivr/feedback"
-            
-            # Make the simulated call
             try:
+                # In production with real phone numbers
+                if not is_simulation and test_phone_numbers:
+                    # Use test phone numbers in rotation
+                    student_phone = test_phone_numbers[i % len(test_phone_numbers)]
+                else:
+                    # Generate a random phone number for simulation
+                    student_phone = f"+1555{random.randint(1000000, 9999999)}"
+                
+                # In a real application, this would be your server's callback URL for the IVR script
+                callback_url = app.config.get('TWILIO_CALLBACK_URL', 'https://example.com/ivr/callback')
+                
+                # Make the call
                 teacher_name = feedback.get('teacher_name', 'Unknown Teacher')
                 class_name = feedback.get('class', 'Unknown Class')
                 subject = feedback.get('subject', 'Unknown Subject')
@@ -304,66 +367,107 @@ def simulate_student_feedback(feedback_id):
                 # Record the call for tracking
                 call_records.append(call)
                 
-                # In a real application, we would wait for the call to complete
-                # For simulation, we'll check the call status immediately
-                call_status = twilio.get_call_status(call['sid'])
-                logger.debug(f"Call to {student_phone} status: {call_status}")
-                
-                # If the call was "completed", get the simulated rating
-                if call_status == "completed":
-                    rating = twilio.get_ivr_response(call['sid'])
-                    if rating in ratings:
-                        ratings[rating] += 1
-                        completed_calls += 1
-                        logger.debug(f"Student {i+1}: Rating = {rating}")
-                    else:
-                        logger.warning(f"Invalid rating received: {rating}")
+                # For simulation, we immediately check call status and generate rating
+                # In production, ratings would come in asynchronously via the IVR callback
+                if is_simulation:
+                    call_status = twilio.get_call_status(call['sid'])
+                    logger.debug(f"Call to {student_phone} status: {call_status}")
+                    
+                    # If the call was "completed", get the simulated rating
+                    if call_status == "completed":
+                        rating = twilio.get_ivr_response(call['sid'])
+                        if rating in ratings:
+                            ratings[rating] += 1
+                            completed_calls += 1
+                            logger.debug(f"Student {i+1}: Rating = {rating}")
+                        else:
+                            logger.warning(f"Invalid rating received: {rating}")
+                else:
+                    # In production, we just record that the call was initiated
+                    # Actual ratings come in through the webhook
+                    logger.info(f"Initiated call to {student_phone} with SID {call['sid']}")
+                    
+                    # Store call SID to feedback ID mapping for later processing
+                    calls_collection.insert_one({
+                        "call_sid": call['sid'],
+                        "feedback_id": feedback_id,
+                        "to": student_phone,
+                        "status": call['status'],
+                        "created_at": datetime.now()
+                    })
             except Exception as call_error:
                 logger.error(f"Error making call to student {i+1}: {call_error}")
         
-        logger.info(f"Completed {completed_calls} out of {student_count} attempted calls")
+        # For simulation, we calculate and update immediately
+        # In production, we'd just record that calls were initiated, but we'd need a background
+        # job to periodically check status and update once all calls are complete
         
-        # Calculate average rating
-        total_ratings = sum(int(k) * v for k, v in ratings.items())
-        average_rating = round(total_ratings / completed_calls, 1) if completed_calls > 0 else 0
-        
-        logger.info(f"Calculated average rating for {feedback.get('teacher_email', 'unknown')}: {average_rating}")
-        
-        # Update the feedback document
-        update_result = feedback_ratings_collection.update_one(
-            {"_id": feedback_id},
-            {
-                "$set": {
-                    "status": "completed",
-                    "calls_completed": completed_calls,
-                    "total_students": student_count,
-                    "ratings": ratings,
-                    "average_rating": average_rating,
-                    "completed_at": datetime.now(),
-                    "call_records": [
-                        {
-                            "sid": call["sid"],
-                            "to": call["to"],
-                            "status": twilio.get_call_status(call["sid"]),
-                            "date": call["date_created"]
-                        } for call in call_records[:5]  # Store only first 5 call records to save space
-                    ]
-                }
-            }
-        )
-        
-        if not update_result.modified_count:
-            logger.warning(f"Failed to update feedback document {feedback_id}")
-            return False
+        if is_simulation:
+            logger.info(f"Completed {completed_calls} out of {student_count} attempted calls")
             
-        logger.info(f"Simulated feedback for {feedback_id} - Average rating: {average_rating}")
-        
-        # Update teacher's overall rating in their record
-        teacher_update_result = update_teacher_rating(feedback["teacher_email"], average_rating)
-        
-        return teacher_update_result
+            # Calculate average rating
+            total_ratings = sum(int(k) * v for k, v in ratings.items())
+            average_rating = round(total_ratings / completed_calls, 1) if completed_calls > 0 else 0
+            
+            logger.info(f"Calculated average rating for {feedback.get('teacher_email', 'unknown')}: {average_rating}")
+            
+            # Update the feedback document
+            update_result = feedback_ratings_collection.update_one(
+                {"_id": feedback_id},
+                {
+                    "$set": {
+                        "status": "completed",
+                        "calls_completed": completed_calls,
+                        "total_students": student_count,
+                        "ratings": ratings,
+                        "average_rating": average_rating,
+                        "completed_at": datetime.now(),
+                        "call_records": [
+                            {
+                                "sid": call["sid"],
+                                "to": call["to"],
+                                "status": twilio.get_call_status(call["sid"]),
+                                "date": call["date_created"]
+                            } for call in call_records[:5]  # Store only first 5 call records to save space
+                        ]
+                    }
+                }
+            )
+            
+            if not update_result.modified_count:
+                logger.warning(f"Failed to update feedback document {feedback_id}")
+                return False
+                
+            logger.info(f"Simulated feedback for {feedback_id} - Average rating: {average_rating}")
+            
+            # Update teacher's overall rating in their record
+            teacher_update_result = update_teacher_rating(feedback["teacher_email"], average_rating)
+            
+            return teacher_update_result
+        else:
+            # In production, mark the feedback as in progress and return success
+            # A separate process would need to check and update the status later
+            update_result = feedback_ratings_collection.update_one(
+                {"_id": feedback_id},
+                {
+                    "$set": {
+                        "status": "in_progress",
+                        "total_students": student_count,
+                        "calls_initiated": len(call_records),
+                        "started_at": datetime.now()
+                    }
+                }
+            )
+            
+            if not update_result.modified_count:
+                logger.warning(f"Failed to update feedback document {feedback_id}")
+                return False
+                
+            logger.info(f"Initiated real feedback calls for {feedback_id} - {len(call_records)} calls started")
+            return True
+            
     except Exception as e:
-        logger.error(f"Error simulating feedback: {e}")
+        logger.error(f"Error collecting feedback: {e}")
         return False
 
 def update_teacher_rating(teacher_email, new_rating):
@@ -2580,6 +2684,401 @@ def get_unread_warnings_count():
             "status": "fail",
             "message": f"An error occurred: {str(e)}"
         })
+
+@app.route("/api/trigger_selective_feedback", methods=["POST"])
+def trigger_selective_feedback():
+    """API route to trigger weekly feedback calls for selected teachers only"""
+    if "email" not in session or session.get("role") != "principal":
+        return jsonify({"status": "fail", "message": "Unauthorized access"})
+    
+    try:
+        # Get selected teachers and number of students from request
+        data = request.json
+        teacher_emails = data.get("teacher_emails", [])
+        students_per_teacher = data.get("students_per_teacher", 15)
+        
+        if not teacher_emails:
+            return jsonify({"status": "fail", "message": "No teachers selected"})
+            
+        logger.info(f"Received request to trigger selective feedback calls for {len(teacher_emails)} teachers")
+        
+        # Track successful calls
+        success_count = 0
+        failed_teachers = []
+        
+        # Process each teacher
+        for teacher_email in teacher_emails:
+            try:
+                # Get teacher details
+                teacher = users_collection.find_one({"email": teacher_email})
+                
+                if not teacher:
+                    logger.warning(f"Teacher not found: {teacher_email}")
+                    failed_teachers.append(teacher_email)
+                    continue
+                    
+                class_level = teacher.get("class")
+                subject = teacher.get("subject")
+                
+                if not class_level or not subject:
+                    logger.warning(f"Teacher {teacher_email} missing class or subject information")
+                    failed_teachers.append(teacher_email)
+                    continue
+                
+                logger.info(f"Processing selective feedback for: {teacher_email}, Class: {class_level}, Subject: {subject}")
+                
+                # Create a feedback request
+                feedback_request = {
+                    "_id": str(uuid.uuid4()),
+                    "teacher_email": teacher_email,
+                    "teacher_name": teacher.get("name", "Unknown Teacher"),
+                    "class": class_level,
+                    "subject": subject,
+                    "status": "scheduled",
+                    "created_at": datetime.now(),
+                    "ratings": {
+                        "1": 0,
+                        "2": 0,
+                        "3": 0,
+                        "4": 0,
+                        "5": 0
+                    },
+                    "average_rating": 0,
+                    "requested_by": session.get("email", "Unknown")
+                }
+                
+                # Insert the feedback request
+                result = feedback_ratings_collection.insert_one(feedback_request)
+                
+                if not result.inserted_id:
+                    logger.error(f"Failed to create feedback request for {teacher_email}")
+                    failed_teachers.append(teacher_email)
+                    continue
+                
+                # Get the feedback ID
+                feedback_id = result.inserted_id
+                logger.info(f"Created selective feedback request with ID: {feedback_id}")
+                
+                # Simulate student feedback with the specified number of students
+                sim_result = simulate_student_feedback(feedback_id, students_per_teacher)
+                
+                if sim_result:
+                    success_count += 1
+                    logger.info(f"Successfully scheduled and simulated feedback for {teacher_email}")
+                else:
+                    logger.error(f"Failed to simulate feedback for {teacher_email}")
+                    failed_teachers.append(teacher_email)
+            
+            except Exception as e:
+                logger.error(f"Error processing teacher {teacher_email}: {e}")
+                failed_teachers.append(teacher_email)
+        
+        # Prepare the response
+        if success_count == len(teacher_emails):
+            return jsonify({
+                "status": "success",
+                "message": f"Successfully triggered IVR calls for all {success_count} teachers"
+            })
+        elif success_count > 0:
+            return jsonify({
+                "status": "success",
+                "message": f"Triggered IVR calls for {success_count} of {len(teacher_emails)} teachers. Failed for {len(failed_teachers)} teachers."
+            })
+        else:
+            return jsonify({
+                "status": "fail",
+                "message": "Failed to trigger IVR calls for any teachers"
+            })
+        
+    except Exception as e:
+        logger.error(f"Error triggering selective feedback: {e}")
+        return jsonify({
+            "status": "fail",
+            "message": f"An error occurred: {str(e)}"
+        })
+
+@app.route("/ivr/callback", methods=["POST"])
+def ivr_callback():
+    """
+    Handle Twilio IVR callback when a call is answered.
+    This generates the TwiML response that tells Twilio what to do on the call.
+    """
+    try:
+        from twilio.twiml.voice_response import VoiceResponse, Gather
+
+        # Get parameters from the request
+        teacher = request.args.get('teacher', 'your teacher')
+        class_name = request.args.get('class', 'your class')
+        subject = request.args.get('subject', 'your subject')
+        
+        # Create TwiML response
+        response = VoiceResponse()
+        
+        # Add a pause for natural conversation flow
+        response.pause(length=1)
+        
+        # Add a welcome message
+        response.say(
+            f"Hello. This is EduPulse calling to get your feedback on {teacher}'s {subject} class.",
+            voice="Polly.Joanna"
+        )
+        
+        response.pause(length=1)
+        
+        # Explain the rating system clearly
+        response.say(
+            "Please rate your experience by pressing a number on your keypad. "
+            "Press 1 for one star, meaning poor performance. "
+            "Press 2 for two stars, meaning below average. "
+            "Press 3 for three stars, meaning average. "
+            "Press 4 for four stars, meaning good. "
+            "Press 5 for five stars, meaning excellent.",
+            voice="Polly.Joanna"
+        )
+        
+        # Gather the student's input
+        gather = Gather(num_digits=1, action="/ivr/process", method="POST", timeout=10)
+        gather.say(
+            "Please press a number from 1 to 5 now to rate the teacher.",
+            voice="Polly.Joanna"
+        )
+        response.append(gather)
+        
+        # If they don't enter a digit, try again
+        response.redirect("/ivr/callback?" + request.query_string.decode())
+        
+        logger.info("Generated IVR TwiML response for feedback call")
+        return str(response)
+    
+    except Exception as e:
+        logger.error(f"Error in IVR callback: {e}")
+        response = VoiceResponse()
+        response.say("Sorry, there was an error processing your call. Goodbye.")
+        response.hangup()
+        return str(response)
+
+@app.route("/ivr/process", methods=["POST"])
+def ivr_process():
+    """
+    Process the input from the student's rating
+    """
+    try:
+        from twilio.twiml.voice_response import VoiceResponse
+        
+        # Get the digit pressed
+        digit = request.form.get('Digits', '')
+        call_sid = request.form.get('CallSid', '')
+        
+        # Find the call record to get the feedback_id
+        call_record = calls_collection.find_one({"call_sid": call_sid})
+        
+        response = VoiceResponse()
+        
+        # Check if valid rating
+        if digit in ['1', '2', '3', '4', '5']:
+            # Store the rating in the database
+            rating_messages = {
+                '1': "We're sorry to hear you had a poor experience. Your one-star feedback has been recorded.",
+                '2': "Thank you for your two-star rating. We'll work on improving this teacher's performance.",
+                '3': "Your three-star rating has been recorded. We appreciate your average assessment.",
+                '4': "Thank you for your positive four-star feedback. We're glad you had a good experience.",
+                '5': "Excellent! Your five-star rating has been recorded. Thank you for your outstanding feedback."
+            }
+            
+            # Log the rating
+            logger.info(f"Received rating {digit} for call {call_sid}")
+            
+            # If we have a valid call record, update the feedback data
+            if call_record and 'feedback_id' in call_record:
+                feedback_id = call_record['feedback_id']
+                logger.info(f"Updating feedback {feedback_id} with rating {digit}")
+                
+                # Update the ratings count in the feedback document
+                feedback_ratings_collection.update_one(
+                    {"_id": feedback_id},
+                    {"$inc": {f"ratings.{digit}": 1, "calls_completed": 1}}
+                )
+                
+                # Update the call record to mark it as processed
+                calls_collection.update_one(
+                    {"call_sid": call_sid},
+                    {"$set": {"status": "completed", "rating": int(digit), "processed_at": datetime.now()}}
+                )
+            
+            # Thank the user with specific message based on rating
+            response.say(
+                f"{rating_messages[digit]} Goodbye!",
+                voice="Polly.Joanna"
+            )
+        else:
+            # Invalid input
+            response.say(
+                "Sorry, I didn't understand your response. Please try again later. Goodbye!",
+                voice="Polly.Joanna"
+            )
+        
+        response.hangup()
+        return str(response)
+    
+    except Exception as e:
+        logger.error(f"Error in IVR process: {e}")
+        response = VoiceResponse()
+        response.say("Sorry, there was an error processing your input. Goodbye.")
+        response.hangup()
+        return str(response)
+
+# Simulated Twilio IVR Call Client for development/testing
+class SimulatedTwilioClient:
+    """
+    A simulated Twilio client for demo purposes.
+    In a real application, you would use the actual Twilio client with your Twilio credentials.
+    """
+    def __init__(self):
+        # These would be real Twilio credentials in production
+        self.account_sid = "TWILIO_ACCOUNT_SID_PLACEHOLDER"
+        self.auth_token = "TWILIO_AUTH_TOKEN_PLACEHOLDER"
+        self.from_number = "+15555555555"  # Your Twilio phone number
+        logger.info("Initialized simulated Twilio client")
+        
+    def make_ivr_call(self, to_number, teacher_name, class_name, subject, callback_url):
+        """
+        Simulate making an IVR call to a student
+        In a real application, this would make an actual Twilio call
+        """
+        try:
+            logger.info(f"SIMULATED: Making IVR call to {to_number} for feedback on {teacher_name}'s {subject} class")
+            
+            # For simulation, we'll just return success
+            return {
+                "status": "queued",
+                "sid": f"CA{generate_random_id(32)}",
+                "to": to_number,
+                "from": self.from_number,
+                "direction": "outbound-api",
+                "date_created": datetime.now().isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Error in simulated IVR call: {e}")
+            return None
+            
+    def get_call_status(self, call_sid):
+        """
+        Simulate getting call status
+        In a real application, this would check the actual call status
+        """
+        # Simulated statuses: queued, ringing, in-progress, completed, busy, failed, no-answer
+        statuses = ["queued", "ringing", "in-progress", "completed", "busy", "failed", "no-answer"]
+        # Weight toward completed for demo purposes
+        weights = [1, 1, 1, 5, 0.5, 0.5, 1]
+        return random.choices(statuses, weights=weights)[0]
+        
+    def get_ivr_response(self, call_sid):
+        """
+        Simulate getting IVR input response
+        In a real application, this would get the actual digits pressed
+        """
+        # Simulate a student pressing 1-5 on their phone
+        # Weight toward higher ratings for more positive results in simulation
+        response = random.choices([1, 2, 3, 4, 5], weights=[1, 2, 4, 6, 7])[0]
+        logger.info(f"SIMULATED: Student pressed {response} for call {call_sid}")
+        return str(response)
+
+# Function to check if file has allowed extension
+def allowed_file(filename):
+    """Check if uploaded file has an allowed extension"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+@app.route('/upload_pdf', methods=['POST'])
+def upload_pdf():
+    """
+    Handle PDF file uploads for PDF reading activities.
+    The uploaded PDFs are stored in a dedicated folder and associated with the activity.
+    """
+    if 'email' not in session or session.get('role') != 'teacher':
+        return jsonify({"status": "fail", "message": "You must be logged in as a teacher"})
+        
+    try:
+        # Check if the post request has the file part
+        if 'pdf_file' not in request.files:
+            return jsonify({"status": "fail", "message": "No file part in the request"})
+            
+        file = request.files['pdf_file']
+        
+        # If user does not select file, browser might submit an empty file
+        if file.filename == '':
+            return jsonify({"status": "fail", "message": "No file selected"})
+            
+        activity_id = request.form.get('activity_id')
+        activity_type = request.form.get('activity_type')
+        activity_title = request.form.get('activity_title')
+        class_level = request.form.get('class_level')
+        teacher_email = session.get('email')
+        
+        # Validate that we have all required data
+        if not all([activity_id, activity_type, activity_title, class_level, teacher_email]):
+            return jsonify({"status": "fail", "message": "Missing required activity information"})
+            
+        # Verify that the activity actually exists and is a PDF activity
+        if activity_type != 'pdf':
+            return jsonify({"status": "fail", "message": "This activity is not a PDF reading activity"})
+            
+        # Check if file is allowed
+        if file and allowed_file(file.filename):
+            # Create a secure filename
+            filename = secure_filename(file.filename)
+            
+            # Add timestamp and activity ID to ensure uniqueness
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            unique_filename = f"{timestamp}_{activity_id}_{filename}"
+            
+            # Create a folder structure based on teacher email and class
+            teacher_folder = os.path.join(app.config['PDF_FOLDER'], teacher_email.replace('@', '_at_'))
+            class_folder = os.path.join(teacher_folder, class_level)
+            
+            # Ensure folders exist
+            if not os.path.exists(teacher_folder):
+                os.makedirs(teacher_folder)
+                
+            if not os.path.exists(class_folder):
+                os.makedirs(class_folder)
+                
+            # Save the file
+            file_path = os.path.join(class_folder, unique_filename)
+            file.save(file_path)
+            
+            logger.info(f"PDF uploaded: {file_path} for activity {activity_id}")
+            
+            # Store the upload record in the database
+            upload_record = {
+                "teacher_email": teacher_email,
+                "class_level": class_level,
+                "activity_id": activity_id,
+                "activity_title": activity_title,
+                "filename": unique_filename,
+                "original_filename": filename,
+                "file_path": file_path,
+                "upload_date": datetime.now(),
+                "file_size_kb": os.path.getsize(file_path) // 1024  # Size in KB
+            }
+            
+            # Store in the database
+            result = db.pdf_uploads.insert_one(upload_record)
+            
+            if result.inserted_id:
+                return jsonify({
+                    "status": "success",
+                    "message": "PDF uploaded successfully",
+                    "file_id": str(result.inserted_id)
+                })
+            else:
+                return jsonify({"status": "fail", "message": "Failed to record the upload in the database"})
+        else:
+            return jsonify({"status": "fail", "message": "File not allowed. Please upload a PDF file."})
+            
+    except Exception as e:
+        logger.error(f"Error uploading PDF: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"status": "fail", "message": f"An error occurred: {str(e)}"})
 
 if __name__ == '__main__':
     # Create test user for easy login
